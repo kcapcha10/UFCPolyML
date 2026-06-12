@@ -1,0 +1,5 @@
+# MLflow tracking configuration
+# MLFLOW_TRACKING_URI env var overrides this at runtime
+tracking_uri: ${oc.env:MLFLOW_TRACKING_URI,sqlite:///mlruns/mlflow.db}
+experiment_name: "ufc_edge"
+artifact_location: mlruns/artifacts

@@ -1,0 +1,9 @@
+# UFCStats spider configuration
+download_delay: 2.0          # seconds between requests (see DECISIONS.md)
+autothrottle_enabled: true
+autothrottle_target_concurrency: 1.0
+concurrent_requests: 1
+user_agent: "ufc-edge-research-bot/0.1 (academic; contact via repo)"
+
+ufcstats_base_url: "http://www.ufcstats.com"
+events_list_url: "http://www.ufcstats.com/statistics/events/completed?page=all"

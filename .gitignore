@@ -216,3 +216,18 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ── ufc-edge project-specific ──────────────────────────────────────────────────
+# Data blobs are DVC-tracked, never committed to git.
+data/*.duckdb
+data/raw/
+data/interim/
+data/processed/
+*.duckdb
+*.duckdb.wal
+
+# MLflow local tracking store + artifacts
+mlruns/
+
+# Scrapy resume state
+.scrapy/

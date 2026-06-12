@@ -1,0 +1,15 @@
+# Polymarket live-capture configuration
+capture_interval_seconds: 300        # 5-minute cadence (see DECISIONS.md)
+max_retries: 3
+retry_backoff_seconds: 2.0
+
+gamma_api_base_url: "https://gamma-api.polymarket.com"
+clob_api_base_url: "https://clob.polymarket.com"
+
+# Market filter: only UFC markets
+market_tag_slug: "ufc"
+
+# How many order-book levels to capture per side
+orderbook_depth: 10
+
+log_level: ${oc.env:LOG_LEVEL,INFO}

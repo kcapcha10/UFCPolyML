@@ -1,0 +1,22 @@
+stages:
+  # ── Scrape ───────────────────────────────────────────────────────────────────
+  scrape_ufcstats:
+    cmd: make scrape
+    deps:
+      - src/ufc_edge/data/ufcstats/
+    outs:
+      - data/raw/ufcstats.duckdb:
+          cache: true
+          persist: true
+    desc: "Crawl ufcstats.com → DuckDB. TODO: wire real output path once stable."
+
+  # ── Cross-check ──────────────────────────────────────────────────────────────
+  kaggle_crosscheck:
+    cmd: uv run python -m ufc_edge.data.kaggle
+    deps:
+      - src/ufc_edge/data/kaggle.py
+      - data/raw/ufcstats.duckdb
+    outs:
+      - data/interim/reconciliation_report.json:
+          cache: true
+    desc: "Compare Kaggle dataset against ufcstats scrape as a data-quality gate."
