@@ -30,4 +30,4 @@ scrape:
 # ── Market capture ───────────────────────────────────────────────────────────────
 
 capture:
-	uv run python -m ufc_edge.market.capture --once
+	uv run python -m ufc_edge.data.polymarket.capture --once

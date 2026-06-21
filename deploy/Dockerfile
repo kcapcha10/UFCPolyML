@@ -18,4 +18,4 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     DUCKDB_PATH=/data/ufc_edge.duckdb
 
-CMD ["python", "-m", "ufc_edge.market.capture"]
+CMD ["python", "-m", "ufc_edge.data.polymarket.capture"]

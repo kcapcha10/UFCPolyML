@@ -7,8 +7,8 @@ summary (markets seen, snapshots written, errors). Safe to restart at any
 point — snapshot writes are idempotent on (token_id, captured_at).
 
 Run modes:
-    python -m ufc_edge.market.capture --once   # single tick (local verification)
-    python -m ufc_edge.market.capture          # loop forever (deployed cron)
+    python -m ufc_edge.data.polymarket.capture --once   # single tick (local verification)
+    python -m ufc_edge.data.polymarket.capture          # loop forever (deployed cron)
 """
 
 from __future__ import annotations
@@ -26,7 +26,8 @@ from omegaconf import OmegaConf
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from ufc_edge.data import storage
-from ufc_edge.data.schemas import MarketInfo, OrderBookSnapshot, OrderLevel
+from ufc_edge.data.polymarket.schemas import MarketInfo, OrderBookSnapshot, OrderLevel
+from ufc_edge.data.polymarket.storage import upsert_order_book_snapshot
 
 logger = logging.getLogger("ufc_edge.capture")
 
@@ -231,7 +232,7 @@ def run_tick(config: CaptureConfig) -> dict[str, int]:
         for market in markets:
             try:
                 snapshot = fetch_order_book(client, market, config)
-                storage.upsert_order_book_snapshot(conn, snapshot)
+                upsert_order_book_snapshot(conn, snapshot)
                 stats["snapshots_written"] += 1
             except Exception as error:
                 stats["errors"] += 1
