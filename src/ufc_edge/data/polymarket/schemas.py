@@ -46,6 +46,9 @@ class OrderBookSnapshot(_FrozenModel):
     mid_price: float | None = None
     spread: float | None = None
     captured_at: datetime
+    tick_id: str = Field(
+        description="UUID shared by every snapshot written in the same capture tick"
+    )
 
 
 class MarketInfo(_FrozenModel):

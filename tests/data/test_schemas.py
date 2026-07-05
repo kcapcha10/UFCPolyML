@@ -50,6 +50,7 @@ def test_order_book_snapshot_validates_nested_levels():
         mid_price=0.5,
         spread=0.2,
         captured_at=SCRAPED_AT,
+        tick_id="tick-1",
     )
     assert snap.bids[0].price == 0.4
     with pytest.raises(ValidationError):
@@ -59,4 +60,16 @@ def test_order_book_snapshot_validates_nested_levels():
             bids=[{"price": 9.9, "size": 1}],  # invalid nested level
             asks=[],
             captured_at=SCRAPED_AT,
+            tick_id="tick-1",
+        )
+
+
+def test_order_book_snapshot_requires_tick_id():
+    with pytest.raises(ValidationError):
+        OrderBookSnapshot(
+            market_id="m",
+            token_id="t",
+            bids=[],
+            asks=[],
+            captured_at=SCRAPED_AT,  # missing tick_id
         )

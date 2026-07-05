@@ -17,6 +17,7 @@ import argparse
 import json
 import logging
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -163,7 +164,7 @@ def _loads_if_string(value: object) -> list | None:
 
 
 def fetch_order_book(
-    client: httpx.Client, market: MarketInfo, config: CaptureConfig
+    client: httpx.Client, market: MarketInfo, config: CaptureConfig, tick_id: str
 ) -> OrderBookSnapshot:
     """Pull the live CLOB book for one token and build a validated snapshot."""
     payload = _request_json(
@@ -184,6 +185,7 @@ def fetch_order_book(
         mid_price=mid_price,
         spread=spread,
         captured_at=datetime.now(UTC),
+        tick_id=tick_id,
     )
 
 
@@ -213,10 +215,12 @@ def _mid_and_spread(
 def run_tick(config: CaptureConfig) -> dict[str, int]:
     """Run one capture tick: enumerate markets, snapshot each book, write to DuckDB.
 
-    A failure on one market is logged and skipped; the tick continues. Returns
-    summary counts for logging and tests.
+    A failure on one market is logged and skipped; the tick continues. Every
+    snapshot in the tick shares one tick_id so it can be read back as a single
+    order-book cross-section. Returns summary counts for logging and tests.
     """
     stats = {"markets_seen": 0, "snapshots_written": 0, "errors": 0}
+    tick_id = str(uuid.uuid4())
     with (
         httpx.Client(timeout=HTTP_TIMEOUT_SECONDS) as client,
         storage.get_connection() as conn,
@@ -231,7 +235,7 @@ def run_tick(config: CaptureConfig) -> dict[str, int]:
         stats["markets_seen"] = len(markets)
         for market in markets:
             try:
-                snapshot = fetch_order_book(client, market, config)
+                snapshot = fetch_order_book(client, market, config, tick_id)
                 upsert_order_book_snapshot(conn, snapshot)
                 stats["snapshots_written"] += 1
             except Exception as error:
@@ -243,7 +247,8 @@ def run_tick(config: CaptureConfig) -> dict[str, int]:
                     error,
                 )
     logger.info(
-        "tick complete markets_seen=%d snapshots_written=%d errors=%d",
+        "tick complete tick_id=%s markets_seen=%d snapshots_written=%d errors=%d",
+        tick_id,
         stats["markets_seen"],
         stats["snapshots_written"],
         stats["errors"],
