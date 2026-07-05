@@ -11,12 +11,7 @@ stages:
     desc: "Crawl ufcstats.com → DuckDB. TODO: wire real output path once stable."
 
   # ── Cross-check ──────────────────────────────────────────────────────────────
-  kaggle_crosscheck:
-    cmd: uv run python -m ufc_edge.data.kaggle
-    deps:
-      - src/ufc_edge/data/kaggle.py
-      - data/raw/ufcstats.duckdb
-    outs:
-      - data/interim/reconciliation_report.json:
-          cache: true
-    desc: "Compare Kaggle dataset against ufcstats scrape as a data-quality gate."
+  # Kaggle cross-check dropped 2026-07-04 (.claude/spec/Key Design Decisions.md D8): Kaggle UFC
+  # sets are mostly ufcstats rescrapes, so they validate nothing independently.
+  # Replacement: a self-consistency validation suite (internal invariants +
+  # independent spot-checks) — designed in LLD v1, stage to be added when built.

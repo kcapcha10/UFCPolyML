@@ -4,7 +4,7 @@ When a response is the challenge interstitial, the middleware solves it (see
 `challenge.py`), caches the clearance cookies on the spider, and retries the
 original request with those cookies attached. The solve is a brief synchronous
 call; acceptable here because the crawl runs at concurrency 1 and the challenge
-is rare (cookie is reused until it expires). See DECISIONS.md.
+is rare (cookie is reused until it expires). See docs/DECISIONS.md.
 """
 
 from __future__ import annotations

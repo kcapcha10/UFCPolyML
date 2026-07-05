@@ -1,5 +1,5 @@
 # UFCStats spider configuration
-download_delay: 2.0          # seconds between requests (see DECISIONS.md)
+download_delay: 2.0          # seconds between requests (see docs/DECISIONS.md)
 autothrottle_enabled: true
 autothrottle_target_concurrency: 1.0
 concurrent_requests: 1

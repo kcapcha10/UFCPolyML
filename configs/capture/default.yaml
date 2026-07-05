@@ -1,5 +1,5 @@
 # Polymarket live-capture configuration
-capture_interval_seconds: 300        # 5-minute cadence (see DECISIONS.md)
+capture_interval_seconds: 300        # 5-minute cadence (see docs/DECISIONS.md)
 max_retries: 3
 retry_backoff_seconds: 2.0
 

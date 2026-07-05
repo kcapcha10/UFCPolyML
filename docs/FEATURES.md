@@ -21,7 +21,7 @@ Every feature carries four attributes (per the documentation contract):
 - **Definition** — one line: what is computed.
 - **Layer** — `model` (predictive, fed to XGBoost) or `strategy` (post-model
   behavioral/execution adjustment, **never** in the gradient path). See the layer
-  separation contract in [CLAUDE.md](CLAUDE.md).
+  separation contract in [CLAUDE.md](../CLAUDE.md).
 - **As-of cutoff** — the temporal-integrity rule for the feature. The global
   invariant: any feature used for fight *X* is computed strictly from data with
   `event_date < fight_date`. Per-feature notes call out tighter handling.
@@ -40,11 +40,13 @@ how much it matters. All features are temporally enforced: any feature used for
 fight *X* is computed strictly from data with `event_date < fight_date`. Leakage
 tests in `tests/unit/test_leakage.py` will cover every feature function (the test
 module and the feature functions do not exist yet — the model/feature layer is
-scaffolded but unimplemented; see [CLAUDE.md](CLAUDE.md) scope map).
+scaffolded but unimplemented; see [CLAUDE.md](../CLAUDE.md) scope map).
 
 Features fall into three computational sources:
 
-- **Quantitative** — computed deterministically from ufcstats + Kaggle data.
+- **Quantitative** — computed deterministically from ufcstats data. (Kaggle was
+  dropped 2026-07-04 — .claude/spec/Key Design Decisions.md D8; a self-scraped pre-UFC source
+  is a separate stretch milestone.)
 - **Graph-derived** — computed from the fight graph (Elo, PageRank, common opponents).
 - **LLM-extracted** — preprocessed offline, cached to DuckDB, treated as static
   inputs. Never recomputed at inference time.
@@ -83,12 +85,14 @@ Computed once per fighter from static data. Updated only if fighter changes weig
 | `stance` | Orthodox / Southpaw / Switch | ufcstats |
 | `age_at_fight` | Age on fight date | derived |
 | `weight_class` | Current weight class | ufcstats |
-| `natural_weight_class` | Weight class where fighter started career | derived |
+| `natural_weight_class` | First weight class observed in the fighter's UFC fights (earliest scraped bout) | derived |
 | `weight_class_delta` | Signed difference from natural class (cutting down = negative) | derived |
 
-> `TODO(human):` `natural_weight_class` derivation is underspecified. ufcstats does
-> not reliably carry pre-UFC career data; define the source (Kaggle? first observed
-> UFC class?) and the rule for "started career."
+> **Resolved (2026-07-04, human decision — D8):** `natural_weight_class` = **first
+> observed UFC weight class**. Honest semantics: this is "class at UFC entry," not
+> "class at pro debut" — pre-UFC history is out of scope until the self-scraped
+> pre-UFC source (stretch milestone) exists. `weight_class_delta` inherits this
+> definition.
 
 ---
 
@@ -145,10 +149,10 @@ to the debut and the opponent being faced.
 | Feature | Definition |
 |---|---|
 | `is_ufc_debut` | Boolean |
-| `pre_ufc_record_wins` | Wins before UFC |
-| `pre_ufc_record_losses` | Losses before UFC |
-| `pre_ufc_opponent_avg_win_pct` | Average win % of opponents faced before UFC |
-| `pre_ufc_finish_rate` | Finish rate in pre-UFC career |
+| `pre_ufc_record_wins` | Wins before UFC — **deferred** (gated on pre-UFC source, D8) |
+| `pre_ufc_record_losses` | Losses before UFC — **deferred** (gated on pre-UFC source, D8) |
+| `pre_ufc_opponent_avg_win_pct` | Average win % of opponents faced before UFC — **deferred** (gated on pre-UFC source, D8) |
+| `pre_ufc_finish_rate` | Finish rate in pre-UFC career — **deferred** (gated on pre-UFC source, D8) |
 | `debut_opponent_ufc_experience` | Number of UFC fights opponent has (hostile vs soft debut) |
 | `debut_opponent_ufc_win_pct` | Win % of debut opponent in UFC |
 | `contender_series_win` | Boolean: fighter won a DWCS bout to get contract |
@@ -159,8 +163,12 @@ went 12-0 against losing-record opponents in a thin regional circuit is not
 equivalent to one who went 8-0 against established regional competition. The debut
 opponent context matters as much as the fighter's own record.
 
-> `TODO(human):` `pre_ufc_*` features require pre-UFC career data that ufcstats does
-> not carry. Confirm the source (Kaggle dataset coverage?) or mark these deferred.
+> **Resolved (2026-07-04, human decision — D8):** the four `pre_ufc_*` features are
+> **deferred**, gated on a self-scraped pre-UFC source (Sherdog/Tapology — a separate
+> stretch milestone with its own fighter-identity-matching risk). Kaggle is dropped
+> and cannot supply this anyway (ufcstats-derived sets carry UFC fights only). The
+> debut features computable from ufcstats (`is_ufc_debut`, `debut_opponent_*`,
+> `contender_series_win`) remain confirmed.
 
 ---
 
@@ -603,7 +611,7 @@ snapshot; closing = final snapshot before fight · **Status:** confirmed (strate
 | `volume_last_24hr` | Trading volume in final 24 hours |
 
 These are sourced from the self-captured order-book snapshots (see
-`src/ufc_edge/market/capture.py`).
+`src/ufc_edge/data/polymarket/capture.py`).
 
 ---
 

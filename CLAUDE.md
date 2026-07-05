@@ -13,7 +13,7 @@ snapshots. Right now only the **data layer** is active: a ufcstats.com scraper a
 5-minute Polymarket order-book capture cron.
 
 The full system is a **six-layer architecture** (high-level locked, low-level pending
-— see [DECISIONS_architecture_redesign.md](DECISIONS_architecture_redesign.md)):
+— see [docs/DECISIONS_architecture_redesign.md](docs/DECISIONS_architecture_redesign.md)):
 DATA → FEATURES → REPS → PREDICT → STRATEGY, with SIM (CLOB replay) and ONLINE
 (feedback loop) as additional layers. The predictor (PREDICT) is model-agnostic;
 XGBoost is the baseline and control, not the definition.
@@ -22,13 +22,13 @@ XGBoost is the baseline and control, not the definition.
 
 Six layers; the separation contract must hold across all of them. Full detail and
 the five build invariants are in
-[DECISIONS_architecture_redesign.md](DECISIONS_architecture_redesign.md).
+[docs/DECISIONS_architecture_redesign.md](docs/DECISIONS_architecture_redesign.md).
 
-- **DATA** (`src/ufc_edge/data/`, `src/ufc_edge/market/`): scrapers, capture cron,
+- **DATA** (`src/ufc_edge/data/`, capture in `src/ufc_edge/data/polymarket/`): scrapers, capture cron,
   offline LLM enrichment (cached structured columns). Single datastore: DuckDB.
 - **FEATURES** (`src/ufc_edge/features/`): tabular as-of features — stats,
   short-notice/injury enrichment. Strict `event_date < fight_date` cutoff.
-- **REPS** (`src/ufc_edge/reps/`, *not yet scaffolded*): learned representations —
+- **REPS** (`src/ufc_edge/reps/`): learned representations —
   sequence encoder (GRU/Transformer over career history) + fight-graph GNN. Both
   emit as-of embeddings and are **two new leakage surfaces**, each pytest-guarded.
 - **PREDICT** (`src/ufc_edge/model/`): model-agnostic interface — tabular ⊕
@@ -37,10 +37,10 @@ the five build invariants are in
 - **STRATEGY** (`src/ufc_edge/strategy/`): sequential decision problem — Kelly/
   shrinkage → bandit → offline RL. Market-derived features (§16) live here, never
   in PREDICT. Behavioral features live here too.
-- **SIM** (`src/ufc_edge/sim/`, *not yet scaffolded*): CLOB replay simulator.
+- **SIM** (`src/ufc_edge/sim/`): CLOB replay simulator.
   Rebuilds the order book at any decision time; a policy may only observe state
   that existed then — no future-price lookahead.
-- **ONLINE** (`src/ufc_edge/online/`, *not yet scaffolded*): feedback on fight
+- **ONLINE** (`src/ufc_edge/online/`): feedback on fight
   resolution — neural warm-start (Adam + replay buffer), GBT retrain cadence,
   rolling recalibration, drift monitoring.
 
@@ -58,7 +58,7 @@ will be **pytest-enforced** once the feature layer exists; until then, treat any
 computation that touches future data as a defect, not a style issue.
 
 The as-of rule extends through the full pipeline:
-- **FEATURES:** `event_date < fight_date`. Opponent-trajectory features (FEATURES.md
+- **FEATURES:** `event_date < fight_date`. Opponent-trajectory features (docs/FEATURES.md
   §9d) are the primary trap — they are deliberately leakage-shaped.
 - **REPS:** both the sequence encoder (reads fights strictly before T) and the
   fight-graph GNN (edges with `event_date < fight_date`) are new leakage surfaces,
@@ -70,18 +70,18 @@ The as-of rule extends through the full pipeline:
 
 ## Documentation-first workflow
 
-- `DECISIONS.md` — every non-obvious choice gets a one-line rationale and revisit
+- `docs/DECISIONS.md` — every non-obvious choice gets a one-line rationale and revisit
   condition. Rejected approaches go here too.
-- `DECISIONS_architecture_redesign.md` — the **locked high-level architecture**
+- `docs/DECISIONS_architecture_redesign.md` — the **locked high-level architecture**
   (six layers, five invariants, D1–D7). Read before touching anything structural.
-- `FEATURES.md` — the **canonical feature registry**. Registry, not brainstorm.
+- `docs/FEATURES.md` — the **canonical feature registry**. Registry, not brainstorm.
 - If you make a judgment call while coding, log it before moving on.
 
 ## Feature-ideation boundary
 
 **The human owns feature ideation.** Claude Code's role is implementation,
 infrastructure, and narrative/context — not inventing predictive features. Never
-add features to `FEATURES.md` that the human hasn't specified. If a definition is
+add features to `docs/FEATURES.md` that the human hasn't specified. If a definition is
 ambiguous, leave a `TODO(human):` marker; don't guess.
 
 ## Code style (CS106B philosophy, Python-first)
@@ -107,22 +107,24 @@ ambiguous, leave a `TODO(human):` marker; don't guess.
 
 ## Scope map
 
-Implementation stops after the capture cron. Everything below FEATURES is either
-an empty scaffold (`__init__.py` only) or does not exist yet.
+The LLD engagement (2026-07) builds layer by layer: a layer is implemented only
+after its design locks in `.claude/spec/` — build order and blockers live in
+`.claude/spec/tasks.md`. "Do not implement" below means that layer's design has
+not locked yet.
 
 | Layer / Area | Package | Status |
 |---|---|---|
 | DATA — ufcstats scraper | `src/ufc_edge/data/ufcstats/` | **Built** |
 | DATA — DuckDB schemas + storage | `src/ufc_edge/data/` | **Built** |
-| DATA — Polymarket capture cron | `src/ufc_edge/market/` | **Built** (P0 — must stay running) |
-| DATA — Kaggle cross-check | `src/ufc_edge/data/kaggle.py` | **Missing** — referenced in `dvc.yaml` but not implemented |
+| DATA — Polymarket capture cron | `src/ufc_edge/data/polymarket/` | **Built** (P0 — must stay running) |
+| DATA — self-consistency validation suite | `src/ufc_edge/data/validation/` | **Built** (2026-07-05) — replaces the dropped Kaggle cross-check; quarantine + era-scoped alarms per D11/D12 (`make validate`) |
 | DATA — offline LLM enrichment (D7) | `src/ufc_edge/data/enrichment/` | **Not started** — do not implement |
 | FEATURES | `src/ufc_edge/features/` | **Scaffolded, empty** — do not implement |
-| REPS (sequence encoder + GNN) | `src/ufc_edge/reps/` | **Not scaffolded** — do not implement |
+| REPS (sequence encoder + GNN) | `src/ufc_edge/reps/` | **Scaffolded, empty** — do not implement |
 | PREDICT (model-agnostic; XGBoost baseline) | `src/ufc_edge/model/` | **Scaffolded, empty** — do not implement |
 | STRATEGY (Kelly → bandit → RL) | `src/ufc_edge/strategy/` | **Scaffolded, empty** — do not implement |
-| SIM (CLOB replay) | `src/ufc_edge/sim/` | **Not scaffolded** — do not implement |
-| ONLINE (feedback loop) | `src/ufc_edge/online/` | **Not scaffolded** — do not implement |
+| SIM (CLOB replay) | `src/ufc_edge/sim/` | **Scaffolded, empty** — do not implement |
+| ONLINE (feedback loop) | `src/ufc_edge/online/` | **Scaffolded, empty** — do not implement |
 | Deployment | `deploy/` | Only the capture cron is deployed (Fly.io) |
 
 ## Environment facts

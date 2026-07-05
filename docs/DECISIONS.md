@@ -31,6 +31,14 @@ future sessions don't re-litigate settled questions. Newest sections grouped by 
 - **Revisit when:** Low-level design lands, or any of the five invariants proves
   unworkable in implementation.
 
+### D3 sequencing resolved: XGBoost-first end-to-end (2026-07-04)
+- **Decision:** Ship features → XGBoost → calibration → walk-forward eval as one
+  concrete pipeline; extract the multi-model interface when model #2 (REPS-fed)
+  arrives. Two contract locks now: raw-score/calibration separation, and explicit
+  feature-matrix missingness semantics. Deep learning is sequenced (via REPS +
+  ablation gate), not cut.
+- **Full rationale:** [.claude/spec/Key Design Decisions.md](../.claude/spec/Key%20Design%20Decisions.md) **D9**.
+
 ---
 
 ## Tooling & environment
@@ -83,14 +91,20 @@ future sessions don't re-litigate settled questions. Newest sections grouped by 
 - **Rationale:** No server to run; sqlite is enough until training starts.
 - **Revisit when:** Multi-user tracking or a remote MLflow server is needed.
 
-### DVC initialized; remote is a stub
+### DVC initialized; remote is a stub — RESOLVED (2026-07-04): Google Drive
 - **Context:** Brief wants `data/` versioned, raw blobs not committed.
-- **Decision:** `dvc init`; `dvc.yaml` declares scrape + cross-check stages. **No real
-  remote configured yet.**
-- **Rationale:** Local versioning works immediately; choosing a remote (S3/GDrive/etc.)
-  is a separate cost/credentials decision.
-- **Revisit when:** Data needs to be shared off this machine — **TODO: pick and
-  configure a DVC remote.**
+- **Decision:** `dvc init`; `dvc.yaml` declares the scrape stage. **Remote chosen
+  2026-07-04 (human): Google Drive** — `dvc[gdrive]` added to dependencies; a
+  `make backup` target pulls the Fly capture DuckDB down and `dvc push`es it,
+  because the capture history is irreplaceable and previously lived on exactly one
+  Fly volume.
+- **Rationale:** Zero-cost storage on an account the human already owns. Known
+  friction accepted: Google requires a self-created OAuth client for dvc-gdrive
+  (one-time browser setup, documented in README).
+- **Remaining setup (human, one-time):** create the Drive folder + OAuth client and
+  run `dvc remote add` — see README "DVC remote" section.
+- **Revisit when:** GDrive rate limits or OAuth churn make pushes unreliable —
+  fall back to S3/Backblaze B2.
 
 ### Pre-commit hook set (no branch protection)
 - **Context:** Brief requires ruff lint+format, end-of-file-fixer,
@@ -118,6 +132,17 @@ future sessions don't re-litigate settled questions. Newest sections grouped by 
 - **Rationale:** DuckDB data is DVC-tracked, never a git blob; keeps history clean.
 - **Revisit when:** Small fixture DBs need to be committed intentionally (use an
   explicit unignore for those paths).
+
+---
+
+## Data sources
+
+### Kaggle dropped as a data source (2026-07-04)
+- **Decision:** Kaggle is out entirely: the cross-check stage is removed from
+  `dvc.yaml` and replaced by a self-consistency validation suite (LLD v1); pre-UFC
+  data becomes a self-scraped stretch milestone. `natural_weight_class` is
+  redefined as first observed UFC class; FEATURES.md §3a `pre_ufc_*` deferred.
+- **Full rationale:** [.claude/spec/Key Design Decisions.md](../.claude/spec/Key%20Design%20Decisions.md) **D8**.
 
 ---
 
@@ -227,15 +252,21 @@ future sessions don't re-litigate settled questions. Newest sections grouped by 
 - **Revisit when:** Error rates rise (would indicate an API change worth handling
   explicitly).
 
-### Per-snapshot `captured_at` (no shared tick id) — known limitation
+### Per-snapshot `captured_at` (no shared tick id) — RESOLVED (2026-07-04): `tick_id`
 - **Context:** During verification, grouping by `captured_at` produced one row per
-  snapshot, not per tick.
-- **Decision (current):** Each snapshot is stamped with `datetime.now(UTC)` at the
-  moment its book is fetched, so one tick's ~960 rows spread across ~90 seconds.
-  Accepted as-is for now; "group by tick" is done by time-bucketing.
-- **Rationale:** Per-market timestamps are strictly more precise; no data lost.
-- **Revisit when:** Tick-level analysis becomes common — **TODO: add a `tick_id`
-  (one UUID/timestamp per tick) column** so a tick is groupable without bucketing.
+  snapshot, not per tick. Each snapshot is stamped at its own fetch moment, so one
+  tick's ~940 rows spread across ~2 minutes; time-bucketing could tear a tick that
+  straddles a bucket boundary into two cross-sections — exactly what the future SIM
+  layer must never see.
+- **Decision:** One `uuid4` per tick, stamped on every snapshot that tick writes
+  (`tick_id` column; nullable). Fresh tables include it; existing databases are
+  migrated by an `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` that runs with the DDL
+  on every connection open. Verified live: one tick → 936 snapshots, 1 distinct
+  `tick_id`, spanning 2m17s.
+- **Historical rows:** NULL `tick_id` (pre-2026-07-04 era cannot be retro-stamped
+  exactly); group those by time-bucketing with the boundary caveat documented in
+  `src/ufc_edge/data/polymarket/storage.py`.
+- **Revisit when:** Never expected — SIM should read cross-sections by `tick_id`.
 
 ### Host: Fly.io + persistent volume + always-restart
 - **Context:** Need a free always-on host; cron must survive restarts.

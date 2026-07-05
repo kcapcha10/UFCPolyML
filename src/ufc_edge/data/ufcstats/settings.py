@@ -1,7 +1,7 @@
 """Scrapy settings for the ufcstats crawl.
 
 Politeness values are sourced from `configs/scrape/default.yaml` so the crawl's
-rate limits live in one place (and are documented in DECISIONS.md). Hard-coded
+rate limits live in one place (and are documented in docs/DECISIONS.md). Hard-coded
 fallbacks apply if the config file is missing.
 """
 
@@ -26,7 +26,7 @@ UFCSTATS_EVENTS_URL = _cfg.get(
     "events_list_url", "http://www.ufcstats.com/statistics/events/completed?page=all"
 )
 
-# ── Politeness (see DECISIONS.md: scraper rate limits) ────────────────────────
+# ── Politeness (see docs/DECISIONS.md: scraper rate limits) ────────────────────────
 DOWNLOAD_DELAY = float(_cfg.get("download_delay", 2.0))
 CONCURRENT_REQUESTS = int(_cfg.get("concurrent_requests", 1))
 CONCURRENT_REQUESTS_PER_DOMAIN = int(_cfg.get("concurrent_requests", 1))

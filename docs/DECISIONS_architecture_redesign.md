@@ -218,4 +218,6 @@ remains a registry, not a brainstorm.
 
 ## Open items (human-owned, not blocking)
 - D3 sequencing: XGBoost-only v1 vs. multi-model interface up front.
+  — **RESOLVED 2026-07-04:** XGBoost-first with two contract locks; see
+  [.claude/spec/Key Design Decisions.md](../.claude/spec/Key%20Design%20Decisions.md) D9.
 - Low-level design of each layer (tradeoffs, schemas, interfaces) — Step 2, human-owned.
