@@ -300,3 +300,87 @@ filter — every function a fresh leakage risk and an O(fights × features) cost
 - **Use case:** to predict next week's card, run the same replay through
   yesterday, emit feature rows for the announced matchups, and hand them to
   PREDICT — identical code to what built the training table.
+
+---
+
+## D14 — Replay state is composable components with a two-phase tick
+
+**Decided:** 2026-07-05 · **Owner:** human · Refines D13 (Decision #4a).
+
+### Why do we want this
+Two silent failure modes drive this. First, a monolithic per-fighter state class
+(~100 fields, one shared update path) means every future feature addition edits
+code that every existing feature depends on — a wrong branch while adding camp
+features can quietly stop streak updates for one subpopulation, and the
+corruption is temporally consistent, so even the P1 deletion oracle passes.
+Second, features read *across* families (§9c weights common opponents by Elo at
+fight time), so if components update mid-fight in registration order, an emitter
+can read post-fight state — one-fight clairvoyance that only appears in
+cross-family features. Correctness must not depend on registration order.
+
+### How we accomplish it
+- One **state component per FEATURES.md family** (RecordState, EloState,
+  ActivityState, …), each owning its accumulators, its update rule, and its
+  tests. **Global components** (the fight graph) sit alongside per-fighter ones.
+- **Two-phase tick, hard rule:** processing fight X, phase 1 emits *all*
+  features against frozen pre-X state (any emitter may read any component);
+  phase 2 applies X's outcome to *all* components. Ordering becomes irrelevant
+  by construction — this generalizes D13's emit-before-update to components.
+- P1's property test exercises cross-family features specifically, since that
+  is where phase-mixing bugs hide.
+
+### What it replaces
+(a) A monolithic FighterState god-object — cheap now, a blast-radius liability
+forever; (b) untyped nested dicts — rejected outright (types at boundaries is a
+house rule).
+
+### Change to process (Before → After)
+- **Before:** adding a feature family means editing shared state code all other
+  families depend on; component interactions are implicit.
+- **After:** adding a family = one new component + its emitters + its tests;
+  existing families are untouchable from its blast radius. Cross-family reads
+  are safe by construction, not by code-review vigilance.
+- **Use case:** §14 camp features land as `CampState` months from now without
+  opening the Elo, record, or streak code paths at all.
+
+---
+
+## D15 — Emitter protocol, versioning with a hash guard, wide output table
+
+**Decided:** 2026-07-05 · **Owner:** human · Completes Decision #4 (with D13/D14).
+
+### Why do we want this
+Three closing choices for the feature engine. The dangerous one is versioning:
+if feature code changes without the cached table's version bumping, the table
+silently mixes rows produced by different code — MLflow logs the same version
+for both, and no experiment is reproducible anymore. You only notice when a
+metric moves between two "identical" runs and you burn a day finding out why.
+
+### How we accomplish it
+- **Protocol:** components own state + an `update(fight)` rule (phase 2);
+  emitters are registered functions `EmitContext -> dict[feature_name, value]`
+  (phase 1), where `EmitContext` is the frozen pre-fight view (both fighters'
+  components, the global graph, as-of fight info). A central registry rejects
+  duplicate feature names at startup and defines the output schema.
+  `None` → NULL → NaN is the missingness contract (D9).
+- **Versioning: manual constant + hash guard.** A human bumps
+  `FEATURE_VERSION`; a committed lockfile records the source hash of the
+  features package per version; a pytest fails whenever code and lockfile
+  diverge — forgetting to bump is *impossible but loud*, and versions stay
+  human-readable (v4, not a hash).
+- **Output: wide table** `features_v{N}`, one row per
+  `(fight_url, fighter_url)`, one column per registered feature. Labels are
+  NOT stored here — they come from joining `fights.winner_url` downstream.
+
+### What it replaces
+Auto-content-hash versioning (unreadable ids, churns on refactors) and
+honor-system manual versioning (silent staleness). Long/narrow output format
+(schema-stable, but requires a pivot for every human inspection; versioned
+tables already solve schema evolution).
+
+### Change to process (Before → After)
+- **Before:** no defined path from a FEATURES.md row to code; caches trusted on
+  faith.
+- **After:** adding a feature = write an emitter, register names, run tests;
+  changing any feature code without bumping `FEATURE_VERSION` fails CI in the
+  same commit. Debugging a value = SELECT one row from the wide table.

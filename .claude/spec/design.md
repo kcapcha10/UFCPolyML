@@ -33,14 +33,65 @@ label-universe or undated violations only. The D11 boundary lives in
 `configs/data/default.yaml: label_start_date` — the single source of truth all
 layers must read.
 
-### FEATURES — as-of engine (architecture locked — D13; internals pending, do not implement)
+### FEATURES — as-of replay engine (design locked — D13/D14/D15; build gated on tasks.md)
 
-Chronological state replay with the emit-before-update rule; output materialized
-to `(fight_url, fighter_url, feature_version)` in DuckDB, DVC-versioned. One
-engine serves training and upcoming-card prediction (no train-serve skew).
-Internals — per-fighter state model, feature-function interface, FEATURES.md
-§1–§12 mapping, quarantine anti-join — are Decision #4. P1 (deletion oracle)
-builds in the same wave as the engine.
+Chronological state replay (D13): fights stream in event-date order; per-fighter
+and global state components (D14) hold every accumulator; the **two-phase tick**
+is the load-bearing rule — phase 1 emits all of fight X's features against
+frozen pre-X state (any emitter may read any component, either fighter, or the
+graph), phase 2 applies X's outcome to all components. One engine serves
+training and upcoming-card prediction; replay input excludes quarantined rows
+(D12) and reads the full feature-history universe (D11 — no lower date bound).
+
+**Protocol (D15):**
+
+```python
+class StateComponent(Protocol):          # phase 2
+    def update(self, fight: FightOutcomeView) -> None: ...
+
+@emitter(section="2", features=["days_since_last_fight", ...])
+def emit_activity(ctx: EmitContext) -> dict[str, float | None]: ...   # phase 1
+```
+
+`EmitContext` = frozen view: `ctx.a` / `ctx.b` (each fighter's full component
+set), `ctx.graph` (global), `ctx.fight_info` (as-of bout metadata: date, weight
+class, scheduled rounds). The **registry** collects emitters, fails loudly at
+startup on duplicate feature names, and defines the output schema. `None` →
+NULL → NaN per the D9 missingness contract.
+
+**Component map (FEATURES.md → code):**
+
+| Component | FEATURES.md | Notes |
+|---|---|---|
+| `PhysicalState` | §1 | first-observed UFC class (D8 resolution); age at emit from dob |
+| `ActivityState` | §2 | fight dates, injury-stoppage flag |
+| `RecordState` | §3, §3a | streaks, win/loss splits; debut context reads *opponent's* RecordState (cross-family) |
+| `FinishingState` | §4, §4a | finish/finished rates, durations |
+| `OutputState` | §5 | rolling per-min stats; **§5a deferred — card position not captured by the scraper (data gap, logged)** |
+| `ChampionshipState` | §6 | title/main-event counts from bout metadata |
+| `WeightClassState` | §8 | class history, per-class records; §8b interactions at emit |
+| `EloState` | §9a | variable-K config per docs/DECISIONS.md |
+| `FightGraph` (global) | §9b, §9c, §11 | dated who-beat-whom edges; PageRank as-of; common-opponent queries; rematch = pair-edge lookup |
+| `GeoState` | §12 | event country; home-country/training-base fields deferred to enrichment (D7) |
+| matchup emitters (stateless) | §10, §10a, §10b | pure deltas/interactions over both fighters' components |
+| — excluded from engine v1 | §9d (leakage trap, TODO(human) semantics open), §13–§15 (strategy-side / enrichment-gated) | |
+
+**Versioning (D15):** `FEATURE_VERSION` manual constant; committed lockfile maps
+version → source hash of the features package; a pytest fails when they diverge
+(forgetting to bump is impossible but loud). MLflow logs the version; walk-
+forward windows lock to it (docs/FEATURES.md Versioning).
+
+**Output (D15):** wide DuckDB table `features_v{N}`, one row per
+`(fight_url, fighter_url)`; labels never stored here (join `fights.winner_url`
+downstream — features and labels stay separate surfaces).
+
+**P1 test plan (same build wave, non-negotiable):** (a) deletion oracle — for
+sampled fights X, truncate the DB to `event_date < X`, replay, and require X's
+emitted row to be bit-identical to the full-replay row; sample must include
+cross-family features (common-opponent, interaction terms), where phase-mixing
+bugs hide; (b) determinism — two full replays produce identical tables;
+(c) hypothesis-generated synthetic careers exercising debut/rematch/layoff edge
+cases.
 
 ### EVAL spine (locked — D10)
 

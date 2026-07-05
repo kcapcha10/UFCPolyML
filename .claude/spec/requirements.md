@@ -75,8 +75,58 @@ build immediately, while historical quirks stay visible but non-blocking.
   fighter's most recent fight, so regressions on active fighters trip the
   modern alarm.
 
-### Bucket B — Feature Computation (as-of engine)
-`TBD`
+### Bucket B — "The engine that cannot read the future" (As-of Feature Computation)
+
+*Locked by D13/D14/D15 (2026-07-05). The failure this bucket prevents: a
+feature that quietly encodes how a career ended, or a cached table that no
+longer matches the code that claims to have produced it.*
+
+#### B1 — Replay ordering and the two-phase tick
+**User story:** As the researcher, I want feature emission structurally unable
+to see a fight's outcome or any later fight, so leakage is prevented by
+construction rather than reviewer vigilance.
+
+- WHEN fights are replayed, THE engine SHALL process them in strict event-date
+  order over the full feature-history universe (D11), excluding quarantined
+  rows (D12).
+- WHEN processing fight X, THE engine SHALL emit all of X's features against
+  frozen pre-X state before any component applies X's outcome.
+- WHEN emitters read across components or fighters, THE result SHALL be
+  independent of component registration order.
+
+#### B2 — Component isolation and the registry
+**User story:** As the researcher, I want each FEATURES.md family isolated in
+its own component, so adding a family cannot corrupt an existing one.
+
+- WHEN a new state component is added, THE change SHALL not require modifying
+  any existing component.
+- IF two emitters declare the same feature name, THEN the registry SHALL fail
+  at startup.
+
+#### B3 — Leakage and determinism guards (P1)
+**User story:** As the researcher, I want an oracle that catches even
+one-fight clairvoyance, so a plausible-but-fake metric gain cannot survive CI.
+
+- WHEN the P1 test truncates the database to `event_date < X` and replays, THE
+  emitted features for fight X SHALL be bit-identical to the full-replay row —
+  including cross-family features.
+- WHEN the engine replays the same input twice, THE output tables SHALL be
+  identical.
+
+#### B4 — Feature versioning with a hash guard
+**User story:** As the researcher, I want any feature-code change without a
+version bump to fail loudly, so cached tables can never silently mix code
+generations.
+
+- WHEN feature source code changes and `FEATURE_VERSION` does not, THEN the
+  hash-guard pytest SHALL fail.
+- WHEN any training or eval run executes, THE feature version SHALL be logged
+  to MLflow and joined into the run's provenance.
+
+#### B5 — Output contract
+- THE engine SHALL write one wide row per `(fight_url, fighter_url)` to
+  `features_v{N}`; missing values are NULL (→ NaN downstream, D9 contract);
+  labels SHALL never be stored in the features table.
 
 ### Bucket C — Learned Representations (REPS)
 `TBD`
