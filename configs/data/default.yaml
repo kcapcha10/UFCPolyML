@@ -4,3 +4,11 @@ duckdb_path: ${oc.env:DUCKDB_PATH,data/ufc_edge.duckdb}
 raw_dir: data/raw
 interim_dir: data/interim
 processed_dir: data/processed
+
+# D11 two-universe boundary: fights on/after this date form the label universe
+# (train/calibrate/eval); everything earlier is feature-history only — it feeds
+# accumulators (Elo, graph, career stats) but never appears as a training row.
+label_start_date: "2010-01-01"
+
+# Where the validation runner writes its JSON report (D12).
+validation_report_path: data/interim/validation_report.json

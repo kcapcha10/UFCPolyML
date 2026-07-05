@@ -18,10 +18,11 @@ import duckdb
 
 from ufc_edge.data.polymarket.storage import POLYMARKET_DDL
 from ufc_edge.data.ufcstats.storage import UFCSTATS_DDL
+from ufc_edge.data.validation.quarantine import VALIDATION_DDL
 
 DEFAULT_DB_PATH = Path("data/ufc_edge.duckdb")
 
-_ALL_DDL = UFCSTATS_DDL + POLYMARKET_DDL
+_ALL_DDL = UFCSTATS_DDL + POLYMARKET_DDL + VALIDATION_DDL
 
 
 def db_path() -> Path:
