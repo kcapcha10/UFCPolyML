@@ -29,12 +29,18 @@
       runner, report; `make validate` CI gate (2026-07-05)
 - [x] **T-D1a** `[DATA][test]` Planted-violation tests: every invariant family,
       era scoping, quarantine refresh (12 tests, 2026-07-05)
-- [ ] **T-D2** `[DATA][experiment]` First real run against the completed
-      ufcstats backfill; review pre-cutoff violation census; verdict on
-      `BREAKDOWN_PARTITION_MISMATCH` (demote if the source itself is
-      inconsistent on legit modern rows) — *blocked on T-O4*
+- [x] **T-D2** `[DATA][experiment]` First real run (2026-07-05, post-backfill).
+      Verdicts: `BREAKDOWN_PARTITION_MISMATCH` fired zero times on 58,660 rows —
+      **kept**. Two invariants were miscalibrated, not the data: overtime
+      formats ('1 Rnd + OT') now skipped by the ending-round check (29 false
+      positives), weight upper bound raised to 360 kg (Yarbrough, 349.3 kg —
+      real). After recalibration: **0 violations database-wide**.
 - [ ] **T-D3** `[DATA][build]` Quarantine anti-join helper for the FEATURES
-      layer — *blocked on FEATURES design (Decision #3)*
+      layer — *blocked on FEATURES design (Decision #4)*
+- [ ] **T-D4** `[DATA][experiment]` UFC 1 (1993-11-12, "The Beginning") is
+      absent from the scrape — earliest event is UFC 2. Determine whether
+      ufcstats omits it from the completed-events list or the spider's list
+      parsing skips a row; feature-history-only impact (early accumulators).
 
 ### FEATURES — as-of replay engine (architecture locked — D13; build blocked on Decision #4)
 

@@ -202,6 +202,19 @@ def test_ending_round_beyond_schedule_detected(conn):
     assert len(found) == 1
 
 
+def test_overtime_format_ending_round_is_not_a_violation(conn):
+    """1990s '1 Rnd + OT' fights legitimately end in round 2 — skipped, not flagged."""
+    _insert_event(conn, OLD_EVENT)
+    _insert_fight(
+        conn,
+        "http://ft/ot",
+        OLD_EVENT[0],
+        ending_round=2,
+        time_format="1 Rnd + OT (12-3)",
+    )
+    assert invariants.ending_round_invalid(conn) == []
+
+
 def test_fighter_measurement_dated_by_last_fight(conn):
     """A parse-error reach on an active fighter must trip the modern alarm."""
     _clean_fight(conn)
