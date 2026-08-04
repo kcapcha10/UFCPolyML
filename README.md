@@ -32,7 +32,7 @@ Data is stored in `data/ufc_edge.duckdb` by default. Override with `DUCKDB_PATH`
 - [docs/TASKS.md](docs/TASKS.md) — ordered build plan and current status.
 - [docs/DECISIONS.md](docs/DECISIONS.md) — key decisions and their rationale.
 - [docs/FEATURES.md](docs/FEATURES.md) — human-owned, in-scope feature registry.
-- [CLAUDE.md](CLAUDE.md) — contributor rules and repository conventions.
+- [AGENTS.md](AGENTS.md) — contributor and coding-agent rules.
 
 ## Repository map
 
