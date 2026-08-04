@@ -48,18 +48,46 @@ new evaluation surface without improving the core XGBoost project.
   `max(250, ceil(20% × N))` unique fights. Use Platt below 1,000 unique calibration
   fights and isotonic at or above that threshold.
 
-## Market comparison — D24 (open implementation details)
+## Lean tuning and final evaluation — D25
 
-The market is an external comparator, never a training input. A report must retain
-the exact snapshot timestamp, matched fighter identities, model probability, market
-implied probability, signed difference, and model/data/config versions. A paper
-signal is a record of that report, not a wager or a performance claim.
+- The final untouched holdout is every UFC event from **January through August
+  2026**. It is evaluated once only after August is complete.
+- Development uses three to four earlier chronological, event-grouped folds and a
+  small fixed set of roughly 12 XGBoost configurations. Choose by mean calibrated
+  Brier score; inspect log loss and ECE as supporting checks.
+- Once the configuration is locked, do not make further modeling choices from the
+  2026 holdout. Report its metrics with event-level bootstrap intervals.
 
-## Open decisions
+## Market comparison — D24
 
-1. Define the lean development-tuning versus final holdout protocol.
-2. Define market-to-fight matching, snapshot selection, and paper-signal persistence.
-3. Define batch retraining cadence, model-artifact contract, and health summary.
+The market is an external comparator, never a training input. V1 uses a small,
+versioned upcoming-fights input (event date, fighter names, weight class) and
+automatically matches only an unambiguous normalized Polymarket UFC market.
+Unmatched or ambiguous cases are visible for manual review; the system never guesses.
+
+A report uses the most recent capture at or before a supplied `as_of_timestamp` and
+retains the snapshot timestamp, matched identities, model probability, market implied
+probability, signed difference, and model/data/config versions. A paper signal is a
+record of that report, not a wager or a performance claim.
+
+## Retraining cadence — D26
+
+Run one batch retrain after every completed UFC event, only after ingestion and
+validation complete cleanly. This keeps the model current while remaining a simple,
+auditable batch workflow rather than an online-learning system.
+
+## Model artifacts — D27
+
+MLflow is the sole v1 artifact store. Every training run logs its XGBoost model,
+calibrator, feature schema and version, resolved config, metrics, data revision, and
+run ID there. The project does not maintain a parallel on-disk model-bundle format.
+
+## Health summary — D28
+
+A single CLI health command emits a structured summary: newest UFC event and data
+timestamp, validation result and quarantine census, latest market-capture timestamp,
+last successful MLflow run, and active model/feature versions. No dashboard belongs
+in v1.
 
 ## Operational choices
 

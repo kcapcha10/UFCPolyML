@@ -26,15 +26,25 @@ report and paper-signal log, not a betting or execution system.
   stay in one split, and calibration data is disjoint from fit and test data.
 - Report per-fold and pooled Brier score, log loss, expected calibration error,
   reliability curves, and event-level bootstrap confidence intervals.
+- Reserve every event from January through August 2026 as the final untouched
+  holdout. Evaluate it once after August has completed; use no result from it to
+  select features, hyperparameters, or calibration choices.
 - Every reported run records its data revision, feature version, resolved config,
-  random seeds, package versions, and model artifact.
+  random seeds, package versions, and XGBoost model/calibrator artifacts in MLflow.
+- Retrain once after each completed UFC event, only after ingestion and validation
+  have completed successfully.
+- Provide one structured health command reporting data freshness, validation and
+  quarantine status, market-capture freshness, latest MLflow run, and active
+  model/feature versions.
 
 ## Report requirements
 
-- Match a scheduled UFC bout to a Polymarket market deterministically; unmatched or
-  ambiguous cases must be visible rather than silently dropped.
-- Select a documented as-of snapshot and persist model probability, market implied
-  probability, signed mismatch, identifiers, and provenance in the report.
+- Read scheduled bouts from a versioned upcoming-fights input and match them to
+  Polymarket deterministically. Unmatched or ambiguous cases must be visible rather
+  than silently dropped or guessed.
+- Select the latest capture at or before a supplied `as_of_timestamp` and persist
+  model probability, market implied probability, signed mismatch, identifiers, and
+  provenance in the report.
 - Paper signals are observational records. The system must not place orders, size
   positions, simulate fills, or report investment returns.
 

@@ -25,14 +25,20 @@ each step has a usable testable result before the next begins.
 - [ ] Build mirrored matrix assembly, fixed-round XGBoost training, in-fold Platt or
   isotonic calibration, and order-symmetric inference tests.
 - [ ] Define the lean development-tuning protocol and freeze a final out-of-time
-  event block before comparing candidate configurations.
+  holdout: all UFC events from January through August 2026. Do not inspect it
+  until development choices are locked and August is complete.
 - [ ] Produce the first reproducible held-out evaluation report.
 
 ## Finish: report product and polish
 
-- [ ] Define market-to-fight matching and as-of snapshot selection.
+- [ ] Implement the versioned upcoming-fights input, strict normalized market matcher,
+  ambiguity statuses, and as-of snapshot selection.
 - [ ] Write a versioned mismatch report and paper-signal log with ambiguity states.
-- [ ] Add batch train, predict, and report commands plus data/model health summaries.
+- [ ] Add batch train, predict, report, and health commands. The health summary must
+  report data/capture freshness, validation/quarantine status, and latest model info;
+  training logs the XGBoost model, calibrator, schema, config, metrics, and provenance
+  to MLflow.
+- [ ] Schedule one validated batch retrain after each completed UFC event.
 - [ ] Run the end-to-end workflow, publish held-out metrics, and document the result.
 
 ## Definition of done
