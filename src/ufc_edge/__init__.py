@@ -1,1 +1,1 @@
-"""UFC Edge: quant-grade UFC fight prediction and Polymarket trading system."""
+"""UFC Edge: point-in-time UFC prediction and market-mismatch reporting."""

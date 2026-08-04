@@ -7,10 +7,10 @@ pipeline only has to route models to the correct DuckDB upsert.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class ItemKind(str, Enum):
+class ItemKind(StrEnum):
     """Discriminator for the kind of parsed record flowing to the pipeline."""
 
     EVENT = "event"

@@ -1,6 +1,6 @@
 """Self-consistency validation suite for scraped ufcstats data.
 
-Replaces the dropped Kaggle cross-check (Key Design Decisions D8). Invariants
+Replaces the dropped Kaggle cross-check. Invariants
 detect *impossible* data (parser bugs, source corruption) — never *incomplete*
 data, which the Missingness Policy handles. Violating rows are quarantined with
 reason codes and excluded from feature computation; alarms are era-scoped per

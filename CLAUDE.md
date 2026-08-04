@@ -1,161 +1,64 @@
-# CLAUDE.md — ufc-edge
+# UFCPolyML contributor guide
 
-Read this before touching anything. It's the rules of the house.
+## Project scope
 
-## What this project is
+V1 is a batch applied-ML system:
 
-A systematic prediction-market trading system for **Polymarket UFC markets**. The
-edge thesis is **not** "predict fight winners" — it's **find where Polymarket prices
-are wrong**. A learning pipeline produces calibrated `P(win)` probabilities; a
-separate strategy layer compares them to market prices, sizes positions with
-fractional Kelly, and models execution realistically using self-captured order-book
-snapshots. Right now only the **data layer** is active: a ufcstats.com scraper and a
-5-minute Polymarket order-book capture cron.
+`DATA → FEATURES → XGBoost + EVAL → mismatch report / paper-signal log`
 
-The full system is a **six-layer architecture** (high-level locked, low-level pending
-— see [docs/DECISIONS_architecture_redesign.md](docs/DECISIONS_architecture_redesign.md)):
-DATA → FEATURES → REPS → PREDICT → STRATEGY, with SIM (CLOB replay) and ONLINE
-(feedback loop) as additional layers. The predictor (PREDICT) is model-agnostic;
-XGBoost is the baseline and control, not the definition.
+The model is strictly odds-free. Market probability is a report comparator, never
+a feature or training label. No deep learning, LLM enrichment, automated trading,
+Kelly sizing, RL/OPE, CLOB simulation, or online learning belongs in v1.
 
-## Layer separation contract (architectural invariant)
+## Non-negotiable correctness rules
 
-Six layers; the separation contract must hold across all of them. Full detail and
-the five build invariants are in
-[docs/DECISIONS_architecture_redesign.md](docs/DECISIONS_architecture_redesign.md).
+- A feature for fight `X` may use only information available strictly before `X`.
+- Training, calibration, and evaluation use event-grouped temporal splits; never
+  random row splits.
+- Calibration data must be disjoint from model-training data and precede test data.
+- Features are emitted before a fight updates any accumulator.
+- Validation failures are quarantined with reason codes; source rows are never
+  silently dropped or auto-corrected.
+- XGBoost consumes no historical or live market-derived feature.
+- A served matchup probability must be symmetric: reversing fighter order returns
+  exactly `1 - p`.
 
-- **DATA** (`src/ufc_edge/data/`, capture in `src/ufc_edge/data/polymarket/`): scrapers, capture cron,
-  offline LLM enrichment (cached structured columns). Single datastore: DuckDB.
-- **FEATURES** (`src/ufc_edge/features/`): tabular as-of features — stats,
-  short-notice/injury enrichment. Strict `event_date < fight_date` cutoff.
-- **REPS** (`src/ufc_edge/reps/`): learned representations —
-  sequence encoder (GRU/Transformer over career history) + fight-graph GNN. Both
-  emit as-of embeddings and are **two new leakage surfaces**, each pytest-guarded.
-- **PREDICT** (`src/ufc_edge/model/`): model-agnostic interface — tabular ⊕
-  embeddings → raw score → calibrate (Platt → isotonic) → `P(win)`. XGBoost is
-  the baseline/control; never the only option.
-- **STRATEGY** (`src/ufc_edge/strategy/`): sequential decision problem — Kelly/
-  shrinkage → bandit → offline RL. Market-derived features (§16) live here, never
-  in PREDICT. Behavioral features live here too.
-- **SIM** (`src/ufc_edge/sim/`): CLOB replay simulator.
-  Rebuilds the order book at any decision time; a policy may only observe state
-  that existed then — no future-price lookahead.
-- **ONLINE** (`src/ufc_edge/online/`): feedback on fight
-  resolution — neural warm-start (Adam + replay buffer), GBT retrain cadence,
-  rolling recalibration, drift monitoring.
+## Engineering conventions
 
-**The model is structurally odds-free.** No odds-derived signal — historical or
-live — enters FEATURES, REPS, or PREDICT. All market signal lives in STRATEGY.
-This is what makes the separation contract the defense against circularity, not a
-rule layered on top of it.
+- Python 3.12 and `uv`; use `uv run`, never global `pip` installs.
+- DuckDB is the single datastore. Hydra holds configuration; no magic constants.
+- Public functions are typed. Use frozen Pydantic models at external boundaries.
+- Prefer small, named functions with one responsibility. Format with `ruff`.
+- Run fixture-based tests only; scraper tests must never require the live site.
+- Never commit secrets, DuckDB files, or raw data blobs.
 
-## Temporal integrity (the most important rule in this repo)
+## Documentation rules
 
-Every feature must be computed with a **strict as-of timestamp**: no information
-from a fight may leak into features for that fight or any earlier fight. This is
-where most public UFC models silently leak and report fake accuracy. No-leakage
-will be **pytest-enforced** once the feature layer exists; until then, treat any
-computation that touches future data as a defect, not a style issue.
+- `docs/REQUIREMENTS.md` is the testable system contract; `docs/DESIGN.md` defines
+  its implementation shape; `docs/TASKS.md` is the build order.
+- `docs/DECISIONS.md` records active, non-obvious technical choices and rationale.
+- `docs/FEATURES.md` is the human-owned registry. Do not invent feature ideas;
+  mark unclear definitions `TODO(human)`.
 
-The as-of rule extends through the full pipeline:
-- **FEATURES:** `event_date < fight_date`. Opponent-trajectory features (docs/FEATURES.md
-  §9d) are the primary trap — they are deliberately leakage-shaped.
-- **REPS:** both the sequence encoder (reads fights strictly before T) and the
-  fight-graph GNN (edges with `event_date < fight_date`) are new leakage surfaces,
-  each with their own pytest guard.
-- **Offline LLM enrichment:** `source_published_at < fight_date`. Being offline buys
-  reproducibility, not leakage protection — an offline job can still read a
-  post-fight article. The guard is on the *source*.
-- **SIM:** a policy may only observe order-book state that existed at decision time.
+## Current status
 
-## Documentation-first workflow
-
-- `docs/DECISIONS.md` — every non-obvious choice gets a one-line rationale and revisit
-  condition. Rejected approaches go here too.
-- `docs/DECISIONS_architecture_redesign.md` — the **locked high-level architecture**
-  (six layers, five invariants, D1–D7). Read before touching anything structural.
-- `docs/FEATURES.md` — the **canonical feature registry**. Registry, not brainstorm.
-- If you make a judgment call while coding, log it before moving on.
-
-## Feature-ideation boundary
-
-**The human owns feature ideation.** Claude Code's role is implementation,
-infrastructure, and narrative/context — not inventing predictive features. Never
-add features to `docs/FEATURES.md` that the human hasn't specified. If a definition is
-ambiguous, leave a `TODO(human):` marker; don't guess.
-
-## Code style (CS106B philosophy, Python-first)
-
-- **Decomposition is the top priority.** One logical task per function, named for
-  that task. ~15–30 lines; >50 is a smell. Entry points (a `main`, a spider's
-  `parse`, a cron tick) read like an outline of well-named calls.
-- **No redundant code.** Repeated logic becomes a helper. Copy-paste with edits is
-  a defect.
-- **Names reveal intent.** `significant_strikes_landed`, never `ssl`. Python:
-  `snake_case` functions/vars, `PascalCase` classes, `UPPER_SNAKE_CASE` constants.
-- **Comments are contracts, not narration.** Docstrings say what/params/returns/
-  pre-post-conditions. Module header states responsibility. Comment the tricky
-  parts (rate-limit choices, leakage subtleties, CLOB quirks) — never the obvious.
-- **No magic numbers.** A bare `300` in the cron is a defect;
-  `CAPTURE_INTERVAL_SECONDS = 300` is correct.
-- **Restraint.** Clear over clever. No global mutable state. Immutable by default
-  (frozen Pydantic models). Right data structure for the job.
-- **Types.** Hint all public functions. Pydantic for any structured external data;
-  validate at the boundary, fail loudly.
-- Formatting is **ruff format**'s job (configured in `pyproject.toml`) — don't
-  fight it.
-
-## Scope map
-
-The LLD engagement (2026-07) builds layer by layer: a layer is implemented only
-after its design locks in `.claude/spec/` — build order and blockers live in
-`.claude/spec/tasks.md`. "Do not implement" below means that layer's design has
-not locked yet.
-
-| Layer / Area | Package | Status |
-|---|---|---|
-| DATA — ufcstats scraper | `src/ufc_edge/data/ufcstats/` | **Built** |
-| DATA — DuckDB schemas + storage | `src/ufc_edge/data/` | **Built** |
-| DATA — Polymarket capture cron | `src/ufc_edge/data/polymarket/` | **Built** (P0 — must stay running) |
-| DATA — self-consistency validation suite | `src/ufc_edge/data/validation/` | **Built** (2026-07-05) — replaces the dropped Kaggle cross-check; quarantine + era-scoped alarms per D11/D12 (`make validate`) |
-| DATA — offline LLM enrichment (D7) | `src/ufc_edge/data/enrichment/` | **Not started** — do not implement |
-| FEATURES | `src/ufc_edge/features/` | **Scaffolded, empty** — do not implement |
-| REPS (sequence encoder + GNN) | `src/ufc_edge/reps/` | **Scaffolded, empty** — do not implement |
-| PREDICT (model-agnostic; XGBoost baseline) | `src/ufc_edge/model/` | **Scaffolded, empty** — do not implement |
-| STRATEGY (Kelly → bandit → RL) | `src/ufc_edge/strategy/` | **Scaffolded, empty** — do not implement |
-| SIM (CLOB replay) | `src/ufc_edge/sim/` | **Scaffolded, empty** — do not implement |
-| ONLINE (feedback loop) | `src/ufc_edge/online/` | **Scaffolded, empty** — do not implement |
-| Deployment | `deploy/` | Only the capture cron is deployed (Fly.io) |
-
-## Environment facts
-
-- **uv** manages everything; Python 3.12. `uv sync --extra dev` then
-  `uv run <cmd>`. Never pip-install into a global env.
-- **DuckDB** is the single datastore: `data/ufc_edge.duckdb` (override with
-  `DUCKDB_PATH`). The connection manager lives in `src/ufc_edge/data/storage.py`;
-  ufcstats upserts in `src/ufc_edge/data/ufcstats/storage.py`; Polymarket upserts
-  in `src/ufc_edge/data/polymarket/storage.py`. All rows carry
-  `scraped_at`/`captured_at`.
-- **Secrets** come from `.env` (gitignored). `.env.example` lists key names.
-  Never commit a secret; detect-secrets runs in pre-commit.
-- **Configs** are a Hydra tree under `configs/` (`data/`, `scrape/`, `capture/`,
-  plus `mlflow.yaml`). Rate limits and intervals are config values, not literals.
-- **DVC** versions `data/`; **MLflow** is wired to local sqlite
-  (`mlruns/mlflow.db`) so `mlflow.start_run()` works with zero setup. No
-  experiments exist yet.
-- **Capture cron** deploys to Fly.io from `deploy/`; secrets via `fly secrets`.
-  Its history is irreplaceable — Polymarket's historical order-book endpoint is
-  dead, so every gap in our capture is permanent. Be careful around it.
-- **Compute:** Stanford FarmShare NVIDIA L40 GPUs are available for later training.
-  Not used today.
-
-## Commands
-
-| Command | What it does |
+| Area | Status |
 |---|---|
-| `make setup` | uv sync + pre-commit install + dvc init guard |
-| `make lint` | ruff check |
-| `make format` | ruff format |
-| `make test` | pytest (parsers run against fixtures, never the live site) |
-| `make scrape` | run the ufcstats Scrapy spider (resumable via JOBDIR) |
-| `make capture` | run one Polymarket capture tick locally for verification |
+| Data ingestion, storage, validation | Built |
+| Polymarket market capture | Built; production cron is P0 |
+| Feature replay engine | Designed, not built |
+| XGBoost, evaluation, calibration | Designed; implementation pending |
+| Mismatch report and paper-signal log | Design pending |
+
+## Common commands
+
+```bash
+make setup
+make validate
+make test
+make lint
+make format
+make scrape
+make capture
+make backup
+```

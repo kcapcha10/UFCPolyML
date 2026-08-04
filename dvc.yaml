@@ -11,7 +11,6 @@ stages:
     desc: "Crawl ufcstats.com → DuckDB. TODO: wire real output path once stable."
 
   # ── Cross-check ──────────────────────────────────────────────────────────────
-  # Kaggle cross-check dropped 2026-07-04 (.claude/spec/Key Design Decisions.md D8): Kaggle UFC
-  # sets are mostly ufcstats rescrapes, so they validate nothing independently.
-  # Replacement: a self-consistency validation suite (internal invariants +
-  # independent spot-checks) — designed in LLD v1, stage to be added when built.
+  # Kaggle cross-check intentionally dropped: Kaggle UFC sets are largely UFCStats
+  # rescrapes, so they are not independent validation. `make validate` runs the
+  # production self-consistency suite instead.

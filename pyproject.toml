@@ -1,7 +1,7 @@
 [project]
 name = "ufc-edge"
 version = "0.1.0"
-description = "Quant-grade UFC fight prediction and Polymarket trading system"
+description = "Leakage-safe XGBoost UFC prediction and market-mismatch reporting"
 requires-python = ">=3.12"
 dependencies = [
     "scrapy>=2.11",
@@ -15,7 +15,9 @@ dependencies = [
     "dvc[gdrive]>=3.50",
     "hydra-core>=1.3",
     "omegaconf>=2.3",
+    "scikit-learn>=1.5",
     "tenacity>=8.3",
+    "xgboost>=2.1",
 ]
 
 [project.optional-dependencies]
@@ -41,8 +43,6 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "N", "ANN", "S", "B", "C4", "SIM"]
 ignore = [
-    "ANN101",  # self annotation not required
-    "ANN102",  # cls annotation not required
     "S101",    # allow assert in tests
 ]
 
