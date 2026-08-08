@@ -1,0 +1,15 @@
+# Evaluation configuration: folds, calibration sizing, holdout window,
+# bootstrap, permutation testing, and sparse-history threshold.
+
+n_folds: 4
+min_train_fights: 500
+min_test_fights: 150
+calibration_ratio: 0.20
+calibration_min: 250
+holdout_start: "2026-01-01"
+holdout_end: "2026-08-31"
+label_start_date: "2010-01-01"
+bootstrap_n: 5000
+bootstrap_alpha: 0.05
+permutation_n: 10000
+sparse_history_threshold: 3
