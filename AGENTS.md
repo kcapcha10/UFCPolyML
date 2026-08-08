@@ -7,8 +7,10 @@ V1 is a batch applied-ML system:
 `DATA → FEATURES → XGBoost + EVAL → mismatch report / paper-signal log`
 
 The model is strictly odds-free. Market probability is a report comparator, never
-a feature or training label. No deep learning, LLM enrichment, automated trading,
-Kelly sizing, RL/OPE, CLOB simulation, or online learning belongs in v1.
+a feature or training label. No deep learning, LLM enrichment of training data,
+automated trading, Kelly sizing, RL/OPE, CLOB simulation, or online learning
+belongs in v1. The LLM enters only as an annotate-only due-diligence layer at
+signal time (D32).
 
 ## Non-negotiable correctness rules
 
@@ -31,24 +33,59 @@ Kelly sizing, RL/OPE, CLOB simulation, or online learning belongs in v1.
 - Prefer small, named functions with one responsibility. Format with `ruff`.
 - Run fixture-based tests only; scraper tests must never require the live site.
 - Never commit secrets, DuckDB files, or raw data blobs.
+- MLflow is the sole artifact store for model runs (D27).
+
+## Skills rule
+
+Every agent working in this repo MUST read and follow
+`.kiro/skills/code-conventions/SKILL.md` before writing any code. It defines
+naming, structure, commenting, test, and design conventions that are binding.
+
+## Commit rules
+
+- One commit per completed task, immediately after that task's verification passes
+  (build + tests green).
+- Commit messages follow Conventional Commits with the task ID in the subject:
+  `feat(features): Implement EloState component [FE-1.1]`
+- Never batch multiple tasks into one commit.
+- Never commit to `main` directly; only the owner/orchestrator merges to `main`.
+
+## Branching rules
+
+Work happens on three long-lived spec branches:
+
+| Branch | Spec | Owned paths |
+|---|---|---|
+| `feature-engine` | Feature Engine | `src/ufc_edge/features/`, `tests/features/`, `configs/graph.yaml` |
+| `model-and-eval` | Model and Evaluation | `src/ufc_edge/model/`, `src/ufc_edge/eval/`, `tests/model/`, `tests/eval/`, `configs/model/`, `configs/eval/` |
+| `mismatch-report` | Mismatch Report | `src/ufc_edge/report/`, `tests/report/`, `configs/report/` |
+
+Each spec's tasks touch only files that spec owns (see ownership table in
+`.kiro/specs/reference/spec-orchestration-brief.md`). Cross-spec integration tasks
+and merges to `main` happen at wave gates defined in each spec's `tasks.md`
+timeline.
 
 ## Documentation rules
 
-- `docs/REQUIREMENTS.md` is the testable system contract; `docs/DESIGN.md` defines
-  its implementation shape; `docs/TASKS.md` is the build order.
-- `docs/DECISIONS.md` records active, non-obvious technical choices and rationale.
-- `docs/FEATURES.md` is the human-owned registry. Do not invent feature ideas;
-  mark unclear definitions `TODO(human)`.
+- `.kiro/specs/DECISIONS.md` is the single decision record.
+- `.kiro/specs/FEATURES.md` is the human-owned feature registry.
+- `.kiro/specs/feature-engine/` — feature engine requirements, design, tasks.
+- `.kiro/specs/model-and-eval/` — model training, calibration, evaluation spec.
+- `.kiro/specs/mismatch-report/` — mismatch report and paper-signal log spec.
+- `.kiro/specs/reference/` — orchestration brief, style guide, legacy registry.
+
+Do not invent feature ideas; mark unclear definitions `TODO(human)`.
 
 ## Current status
 
 | Area | Status |
 |---|---|
 | Data ingestion, storage, validation | Built |
-| Polymarket market capture | Built; production cron is P0 |
-| Feature replay engine | Designed, not built |
-| XGBoost, evaluation, calibration | Designed; implementation pending |
-| Mismatch report and paper-signal log | Design pending |
+| Polymarket market capture | Built; production cron deployed on Fly |
+| Feature engine spec | Complete (requirements, design, tasks) |
+| Model and evaluation spec | Complete (requirements, design, tasks) |
+| Mismatch report spec | Complete (requirements, design, tasks) |
+| Implementation | Not started (Wave 0 next) |
 
 ## Common commands
 
