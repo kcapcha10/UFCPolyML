@@ -30,3 +30,7 @@ data/processed/
 # Machine-specific settings
 .claude/settings.local.json
 .DS_Store
+
+# Ephemeral build/agent artifacts
+.sisyphus/
+build.log
