@@ -34,7 +34,7 @@ def fighter_detail_html() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Synthetic feature-table fixture (ME-0.4)
+# Synthetic feature-table fixture
 # ---------------------------------------------------------------------------
 
 
