@@ -14,7 +14,6 @@ from pydantic import field_validator
 
 from ufc_edge.data.schemas import _FrozenModel
 
-
 # ---------------------------------------------------------------------------
 # Enumerations
 # ---------------------------------------------------------------------------
