@@ -236,8 +236,8 @@ def generate_feature_table(
     draw_indices = {3, 7}
     nc_indices = {12}
 
-    for event_idx, event in enumerate(events):
-        for bout in range(FIGHTS_PER_EVENT):
+    for _event_idx, event in enumerate(events):
+        for _bout in range(FIGHTS_PER_EVENT):
             fight_url = f"http://ufcstats.com/fight-details/fght{fight_idx:04d}"
             fighter_a = fighters[fighter_idx]
             fighter_b = fighters[fighter_idx + 1]
