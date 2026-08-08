@@ -1,0 +1,40 @@
+# Graph-derived feature configuration.
+# Elo, Glicko-2, PageRank, and common-opponent hyperparameters.
+# Values marked TODO(human) require owner specification before training.
+
+elo:
+  initial_rating: 1500
+  k_base: TODO(human)
+  method_bonus_map:
+    KO/TKO: TODO(human)
+    Submission: TODO(human)
+    Decision: 0.0
+  recency_weight_halflife: TODO(human)
+  inactivity_decay_rate: TODO(human)
+  inactivity_period_days: 180
+  dq_k_multiplier: 0.1
+  injury_stoppage_k: 0
+
+glicko2:
+  initial_mu: 1500
+  initial_rd: 350
+  tau: TODO(human)
+  rating_period_days: TODO(human)
+  high_uncertainty_threshold: TODO(human)
+
+pagerank:
+  damping: 0.85
+  finish_type_bonus_map:
+    KO/TKO: TODO(human)
+    Submission: TODO(human)
+    Decision: 0.0
+  recency_decay_lambda: TODO(human)
+  early_finish_bonus: TODO(human)
+  convergence_tolerance: 1.0e-6
+  max_iterations: 100
+
+common_opponents:
+  lookback_years: 3
+  recency_decay_lambda: TODO(human)
+  quality_weight_elo: TODO(human)
+  quality_weight_pagerank: TODO(human)

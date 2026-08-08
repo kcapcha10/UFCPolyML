@@ -1,0 +1,6 @@
+{
+  "version": "v1",
+  "source_hash": "66714a639056932943d938ec818c040f055f550d48af1418333427acd31cb68f",
+  "changelog": "Initial feature engine scaffold with versioning guard",
+  "created_at": "2026-08-08T23:23:00+00:00"
+}

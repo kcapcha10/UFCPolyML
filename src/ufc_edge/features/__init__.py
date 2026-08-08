@@ -1,7 +1,37 @@
-"""Feature layer — scaffolded, intentionally empty.
+"""Feature engine — protocol contracts and domain models.
 
-Temporally-aware feature engineering lives here later (Elo, PageRank,
-common-opponent analysis, rolling stats). Every feature must respect strict
-as-of cutoffs; see AGENTS.md and .kiro/specs/FEATURES.md for the
-canonical registry. Do not implement without human-specified feature definitions.
+Point-in-time feature engineering for UFC fight prediction. Implements strict
+temporal isolation via event-atomic replay with emit-before-update semantics.
+Every feature depends only on information strictly prior to the fight.
 """
+
+from ufc_edge.features.contracts import (
+    EmitContext as EmitContext,
+)
+from ufc_edge.features.contracts import (
+    EventTick as EventTick,
+)
+from ufc_edge.features.contracts import (
+    FeatureEmitter as FeatureEmitter,
+)
+from ufc_edge.features.contracts import (
+    FeatureRow as FeatureRow,
+)
+from ufc_edge.features.contracts import (
+    FighterProfile as FighterProfile,
+)
+from ufc_edge.features.contracts import (
+    FightOutcomeView as FightOutcomeView,
+)
+from ufc_edge.features.contracts import (
+    FightTotals as FightTotals,
+)
+from ufc_edge.features.contracts import (
+    FrozenState as FrozenState,
+)
+from ufc_edge.features.contracts import (
+    HistoricalFight as HistoricalFight,
+)
+from ufc_edge.features.contracts import (
+    StateComponent as StateComponent,
+)
