@@ -1,4 +1,4 @@
-.PHONY: setup lint format test scrape capture backup validate
+.PHONY: setup lint format test scrape capture backup validate features
 
 # ── Bootstrap ────────────────────────────────────────────────────────────────────
 
@@ -29,6 +29,11 @@ scrape:
 
 validate:
 	uv run python -m ufc_edge.data.validation.runner
+
+# ── Feature engine ───────────────────────────────────────────────────────────────
+
+features:
+	uv run python -m ufc_edge.features
 
 # ── Market capture ───────────────────────────────────────────────────────────────
 
