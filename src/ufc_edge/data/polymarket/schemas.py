@@ -45,6 +45,10 @@ class OrderBookSnapshot(_FrozenModel):
     asks: list[OrderLevel]
     mid_price: float | None = None
     spread: float | None = None
+    best_bid: float | None = None
+    best_ask: float | None = None
+    best_bid_size: float | None = None
+    best_ask_size: float | None = None
     captured_at: datetime
     tick_id: str = Field(
         description="UUID shared by every snapshot written in the same capture tick"
