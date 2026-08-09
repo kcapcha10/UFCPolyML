@@ -5,3 +5,4 @@ from ufc_edge.features.components.pagerank import PageRankGraph as PageRankGraph
 from ufc_edge.features.components.rolling_stats import (
     RollingStatsAccumulator as RollingStatsAccumulator,
 )
+from ufc_edge.features.components.glicko2 import Glicko2Tracker as Glicko2Tracker
