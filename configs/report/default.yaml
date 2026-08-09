@@ -1,6 +1,7 @@
 # Mismatch report pipeline configuration
 gate:
-  k: 2.0                              # magnitude-gate multiplier (D34)
+  k: 2.0                              # multiplier applied to a bucket's calibration
+                                       # error to decide if a mismatch is flagged
   buckets:
     - id: "0.1-0.3"
       lower: 0.1
@@ -16,7 +17,7 @@ gate:
       upper: 0.9
 
 sparse_history:
-  min_prior_ufc_fights_threshold: 3   # D37: tag when either fighter has < 3 prior UFC bouts
+  min_prior_ufc_fights_threshold: 3   # tag when either fighter has < 3 prior UFC bouts
 
 due_diligence:
   model_name: "claude-sonnet-4-20250514"
@@ -27,8 +28,8 @@ due_diligence:
   enabled: true
 
 post_signal_snapshots:
-  offsets_hours: [1, 4, 24]           # D36: ~T+1h, T+4h, T+24h
-  include_fight_time: true            # D36: also capture at event start
+  offsets_hours: [1, 4, 24]           # capture points after a signal fires
+  include_fight_time: true            # also capture a snapshot at event start
   max_retries: 2
 
 staleness:
