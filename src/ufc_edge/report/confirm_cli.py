@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 
 import duckdb
 
+from ufc_edge.report.matching import get_unresolved
 from ufc_edge.report.schemas import (
     MarketFightLink,
     MatchMethod,
@@ -46,37 +47,6 @@ def _connect(db_path: str) -> duckdb.DuckDBPyConnection:
 
 
 # ── Core functions ────────────────────────────────────────────────────────────
-
-
-def get_unresolved(conn: duckdb.DuckDBPyConnection) -> list[MarketFightLink]:
-    """Return all unresolved links (non-MATCHED, no reviewer).
-
-    This is a local stub matching the interface of report.matching.get_unresolved.
-    It queries market_fight_links directly for rows awaiting human review.
-    """
-    rows = conn.execute(
-        """
-        SELECT fight_url, token_id, match_status, match_method,
-               candidate_count, matched_at, reviewed_by
-        FROM market_fight_links
-        WHERE match_status != 'MATCHED'
-          AND reviewed_by IS NULL
-        ORDER BY matched_at
-        """,
-    ).fetchall()
-
-    return [
-        MarketFightLink(
-            fight_url=r[0],
-            token_id=r[1],
-            match_status=MatchStatus(r[2]),
-            match_method=MatchMethod(r[3]) if r[3] else None,
-            candidate_count=r[4],
-            matched_at=r[5],
-            reviewed_by=r[6],
-        )
-        for r in rows
-    ]
 
 
 def display_unresolved(links: list[MarketFightLink]) -> None:
