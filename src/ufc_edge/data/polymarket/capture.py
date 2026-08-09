@@ -175,6 +175,8 @@ def fetch_order_book(
     bids = _top_levels(payload.get("bids", []), descending=True, depth=config.orderbook_depth)
     asks = _top_levels(payload.get("asks", []), descending=False, depth=config.orderbook_depth)
     mid_price, spread = _mid_and_spread(bids, asks)
+    best_bid, best_bid_size = _top_of_side(bids)
+    best_ask, best_ask_size = _top_of_side(asks)
     return OrderBookSnapshot(
         market_id=market.market_id,
         token_id=market.token_id,
@@ -184,6 +186,10 @@ def fetch_order_book(
         asks=asks,
         mid_price=mid_price,
         spread=spread,
+        best_bid=best_bid,
+        best_ask=best_ask,
+        best_bid_size=best_bid_size,
+        best_ask_size=best_ask_size,
         captured_at=datetime.now(UTC),
         tick_id=tick_id,
     )
@@ -207,6 +213,17 @@ def _mid_and_spread(
         return None, None
     best_bid, best_ask = bids[0].price, asks[0].price
     return (best_bid + best_ask) / 2, best_ask - best_bid
+
+
+def _top_of_side(levels: list[OrderLevel]) -> tuple[float | None, float | None]:
+    """Extract price and size from the best level; (None, None) if the side is empty.
+
+    Stored alongside the full JSON book so downstream consumers can assess
+    whether the quoted price was actually fillable at the captured depth.
+    """
+    if not levels:
+        return None, None
+    return levels[0].price, levels[0].size
 
 
 # ── Tick orchestration ────────────────────────────────────────────────────────

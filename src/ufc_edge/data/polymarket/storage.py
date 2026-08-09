@@ -41,9 +41,29 @@ _MIGRATE_ADD_TICK_ID = """
 ALTER TABLE order_book_snapshots ADD COLUMN IF NOT EXISTS tick_id VARCHAR;
 """
 
+# Adds top-of-book price and size columns for future fillability analysis.
+# Existing rows retain NULL — the book data was already captured in the JSON
+# columns but not denormalized until this migration.
+_MIGRATE_ADD_BEST_BID = """
+ALTER TABLE order_book_snapshots ADD COLUMN IF NOT EXISTS best_bid DOUBLE;
+"""
+_MIGRATE_ADD_BEST_ASK = """
+ALTER TABLE order_book_snapshots ADD COLUMN IF NOT EXISTS best_ask DOUBLE;
+"""
+_MIGRATE_ADD_BEST_BID_SIZE = """
+ALTER TABLE order_book_snapshots ADD COLUMN IF NOT EXISTS best_bid_size DOUBLE;
+"""
+_MIGRATE_ADD_BEST_ASK_SIZE = """
+ALTER TABLE order_book_snapshots ADD COLUMN IF NOT EXISTS best_ask_size DOUBLE;
+"""
+
 POLYMARKET_DDL: list[str] = [
     _CREATE_ORDER_BOOK_SNAPSHOTS,
     _MIGRATE_ADD_TICK_ID,
+    _MIGRATE_ADD_BEST_BID,
+    _MIGRATE_ADD_BEST_ASK,
+    _MIGRATE_ADD_BEST_BID_SIZE,
+    _MIGRATE_ADD_BEST_ASK_SIZE,
 ]
 
 # ── Upserts ───────────────────────────────────────────────────────────────────
@@ -59,8 +79,9 @@ def upsert_order_book_snapshot(
         """
         INSERT INTO order_book_snapshots
             (market_id, token_id, question, outcome, bids, asks,
-             mid_price, spread, captured_at, tick_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             mid_price, spread, best_bid, best_ask, best_bid_size,
+             best_ask_size, captured_at, tick_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (token_id, captured_at) DO NOTHING
         """,
         [
@@ -72,6 +93,10 @@ def upsert_order_book_snapshot(
             asks_json,
             snapshot.mid_price,
             snapshot.spread,
+            snapshot.best_bid,
+            snapshot.best_ask,
+            snapshot.best_bid_size,
+            snapshot.best_ask_size,
             snapshot.captured_at,
             snapshot.tick_id,
         ],
