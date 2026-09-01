@@ -223,9 +223,10 @@ class TestStratifyByHistoryDepth:
         ]
         # First two fights: min(2, 5)=2 and min(3, 10)=3 → sparse
         # Third fight: min(8, 12)=8 → non-sparse
-        min_counts = [2, 3, 8]
+        fighter_a_counts = [2, 3, 8]
+        fighter_b_counts = [5, 10, 12]
 
-        result = stratify_by_history_depth(predictions, min_counts)
+        result = stratify_by_history_depth(predictions, fighter_a_counts, fighter_b_counts)
 
         assert result.sparse.n_fights == 2
         assert result.non_sparse.n_fights == 1
@@ -238,10 +239,15 @@ class TestStratifyByHistoryDepth:
             FightPrediction(event_id="e2", prob=0.5, label=1),
         ]
         # With threshold=7: counts 2, 3, 8 → first two sparse, third not
-        min_counts = [2, 3, 8]
+        fighter_a_counts = [2, 3, 8]
+        fighter_b_counts = [5, 10, 12]
 
-        result_default = stratify_by_history_depth(predictions, min_counts, threshold=3)
-        result_raised = stratify_by_history_depth(predictions, min_counts, threshold=7)
+        result_default = stratify_by_history_depth(
+            predictions, fighter_a_counts, fighter_b_counts, threshold=3
+        )
+        result_raised = stratify_by_history_depth(
+            predictions, fighter_a_counts, fighter_b_counts, threshold=7
+        )
 
         # Default (3): 2 sparse, 1 non-sparse
         assert result_default.sparse.n_fights == 2
@@ -252,7 +258,9 @@ class TestStratifyByHistoryDepth:
         assert result_raised.non_sparse.n_fights == 1
 
         # With threshold=8: all become sparse
-        result_high = stratify_by_history_depth(predictions, min_counts, threshold=8)
+        result_high = stratify_by_history_depth(
+            predictions, fighter_a_counts, fighter_b_counts, threshold=8
+        )
         assert result_high.sparse.n_fights == 3
         assert result_high.non_sparse.n_fights == 0
 
@@ -266,10 +274,11 @@ class TestStratifyByHistoryDepth:
             FightPrediction(event_id="e2", prob=0.5, label=1),
             FightPrediction(event_id="e2", prob=0.5, label=0),
         ]
-        # First two: count ≤3 (sparse), last two: count >3 (non-sparse)
-        min_counts = [1, 2, 10, 15]
+        # First two: minimum count ≤3 (sparse), last two: minimum count >3
+        fighter_a_counts = [1, 2, 10, 15]
+        fighter_b_counts = [4, 5, 20, 20]
 
-        result = stratify_by_history_depth(predictions, min_counts)
+        result = stratify_by_history_depth(predictions, fighter_a_counts, fighter_b_counts)
 
         assert result.sparse.brier == pytest.approx(0.0)
         assert result.non_sparse.brier == pytest.approx(0.25)
@@ -286,20 +295,20 @@ class TestStratifyByHistoryDepth:
             FightPrediction(event_id="e2", prob=0.3, label=1 if i < 15 else 0) for i in range(n)
         ]
         predictions = sparse_preds + non_sparse_preds
-        # First 50: sparse (count=1), last 50: non-sparse (count=20)
-        min_counts = [1] * n + [20] * n
+        # First 50: minimum count=1, last 50: minimum count=20
+        fighter_a_counts = [1] * n + [20] * n
+        fighter_b_counts = [10] * n + [25] * n
 
-        result = stratify_by_history_depth(predictions, min_counts)
+        result = stratify_by_history_depth(predictions, fighter_a_counts, fighter_b_counts)
 
         assert result.sparse.ece == pytest.approx(0.4, abs=1e-10)
         assert result.non_sparse.ece == pytest.approx(0.0, abs=1e-10)
 
     def test_min_prior_fights_is_lesser_of_two_fighters(self) -> None:
-        """The min_prior_ufc_fights value should be the lesser count of the pair.
+        """History depth is derived from both fighters' prior-fight counts.
 
-        This test verifies the caller's contract: the input represents the
-        minimum of both fighters' prior-fight counts. A fight between a
-        10-fight veteran and a 2-fight newcomer has min_prior_ufc_fights=2.
+        A fight between a 10-fight veteran and a 2-fight newcomer must be
+        classified by the newcomer's count rather than a precomputed minimum.
         """
         predictions = [
             FightPrediction(event_id="e1", prob=0.7, label=1),
@@ -307,47 +316,55 @@ class TestStratifyByHistoryDepth:
         ]
         # Fight 1: fighter A has 10 fights, fighter B has 2 → min=2 (sparse)
         # Fight 2: fighter A has 5 fights, fighter B has 7 → min=5 (non-sparse)
-        min_counts = [min(10, 2), min(5, 7)]
+        fighter_a_counts = [10, 5]
+        fighter_b_counts = [2, 7]
 
-        result = stratify_by_history_depth(predictions, min_counts)
+        result = stratify_by_history_depth(predictions, fighter_a_counts, fighter_b_counts)
 
         assert result.sparse.n_fights == 1
         assert result.non_sparse.n_fights == 1
-        # Verify the threshold is recorded
         assert result.threshold == 3
 
     def test_returns_stratified_metrics_dataclass(self) -> None:
         """Return type is StratifiedMetrics containing StratumMetrics."""
         predictions = [FightPrediction(event_id="e1", prob=0.5, label=1)]
-        min_counts = [2]
 
-        result = stratify_by_history_depth(predictions, min_counts)
+        result = stratify_by_history_depth(predictions, [2], [20])
 
         assert isinstance(result, StratifiedMetrics)
         assert isinstance(result.sparse, StratumMetrics)
         assert isinstance(result.non_sparse, StratumMetrics)
 
-    def test_empty_stratum_reports_zero_metrics(self) -> None:
-        """A stratum with no fights reports zero metrics rather than NaN."""
+    def test_empty_sparse_stratum_reports_no_data(self) -> None:
+        """An empty sparse stratum reports no data rather than perfect metrics."""
         predictions = [FightPrediction(event_id="e1", prob=0.5, label=1)]
 
-        result = stratify_by_history_depth(predictions, [4])
+        result = stratify_by_history_depth(predictions, [4], [8])
 
         assert result.sparse.n_fights == 0
-        assert result.sparse.brier == 0.0
-        assert result.sparse.ece == 0.0
+        assert result.sparse.brier is None
+        assert result.sparse.ece is None
+
+    def test_empty_non_sparse_stratum_reports_no_data(self) -> None:
+        """An empty non-sparse stratum reports no data rather than perfect metrics."""
+        predictions = [FightPrediction(event_id="e1", prob=0.5, label=1)]
+
+        result = stratify_by_history_depth(predictions, [1], [8])
+
+        assert result.non_sparse.n_fights == 0
+        assert result.non_sparse.brier is None
+        assert result.non_sparse.ece is None
 
     def test_negative_history_count_raises_value_error(self) -> None:
         """Negative prior-fight counts are invalid input."""
         predictions = [FightPrediction(event_id="e1", prob=0.5, label=1)]
 
         with pytest.raises(ValueError, match="non-negative"):
-            stratify_by_history_depth(predictions, [-1])
+            stratify_by_history_depth(predictions, [-1], [2])
 
     def test_mismatched_lengths_raises_value_error(self) -> None:
-        """Predictions and min_prior_ufc_fights must have the same length."""
+        """All per-fight inputs must have the same length."""
         predictions = [FightPrediction(event_id="e1", prob=0.5, label=1)]
-        min_counts = [2, 3]
 
         with pytest.raises(ValueError, match="must match"):
-            stratify_by_history_depth(predictions, min_counts)
+            stratify_by_history_depth(predictions, [2, 3], [4, 5])
