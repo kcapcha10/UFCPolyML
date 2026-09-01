@@ -22,9 +22,15 @@ DEFAULT_LEAKAGE_CORRELATION_THRESHOLD = 0.8
 CROSS_CHECK_LOW_MATCH_RATE = "CROSS_CHECK_LOW_MATCH_RATE"
 NO_CROSS_CHECK_OVERLAP = "NO_CROSS_CHECK_OVERLAP"
 MISSING_CROSS_CHECK_FIELD = "MISSING_CROSS_CHECK_FIELD"
+MISSING_JOIN_KEY = "MISSING_JOIN_KEY"
+DUPLICATE_JOIN_KEY = "DUPLICATE_JOIN_KEY"
+AMBIGUOUS_JOIN_KEY = "AMBIGUOUS_JOIN_KEY"
 PROVENANCE_INCOMPLETE = "PROVENANCE_INCOMPLETE"
+LEAKAGE_COLUMNS_REQUIRED = "LEAKAGE_COLUMNS_REQUIRED"
 LEAKAGE_DETECTED = "LEAKAGE_DETECTED"
 LEAKAGE_TEST_INCONCLUSIVE = "LEAKAGE_TEST_INCONCLUSIVE"
+NONFINITE_LEAKAGE_INPUT = "NONFINITE_LEAKAGE_INPUT"
+NONFINITE_LEAKAGE_CORRELATION = "NONFINITE_LEAKAGE_CORRELATION"
 
 _REQUIRED_PROVENANCE_FIELDS = (
     "dataset_version",
@@ -156,9 +162,18 @@ def cross_check_field(
     comparison_field = ufc_field or field_name
     candidate_rows = list(kaggle_rows[:sample_size] if sample_size is not None else kaggle_rows)
     source_rows = list(ufc_rows)
-    resolved_join_key = _resolve_join_key(candidate_rows, source_rows, join_key)
-
-    if resolved_join_key is None:
+    join_key_reason = _validate_join_keys(candidate_rows, source_rows, join_key)
+    if join_key_reason is not None:
+        return CrossCheckResult(
+            field_name=field_name,
+            compared_count=0,
+            matching_count=0,
+            match_rate=None,
+            threshold=match_rate_threshold,
+            passed=False,
+            reason_codes=(join_key_reason,),
+        )
+    if not candidate_rows or not source_rows:
         return CrossCheckResult(
             field_name=field_name,
             compared_count=0,
@@ -169,17 +184,12 @@ def cross_check_field(
             reason_codes=(NO_CROSS_CHECK_OVERLAP,),
         )
 
-    source_by_key = {
-        row[resolved_join_key]: row
-        for row in source_rows
-        if resolved_join_key in row and row[resolved_join_key] is not None
-    }
+    source_by_key = {row[join_key]: row for row in source_rows}
     compared_count = 0
     matching_count = 0
     missing_field = False
     for candidate in candidate_rows:
-        key = candidate.get(resolved_join_key)
-        source = source_by_key.get(key)
+        source = source_by_key.get(candidate[join_key])
         if source is None:
             continue
         candidate_value = candidate.get(field_name)
@@ -224,37 +234,59 @@ def test_field_leakage(
 ) -> LeakageResult:
     """Check absolute Pearson correlation with supplied post-fight columns.
 
-    Behavior/params/return: calculate correlations using complete numeric pairs.
+    Behavior/params/return: calculate correlations using complete finite numeric pairs.
     Assumes/errors: callers explicitly identify post-fight or odds-derived columns;
-    a requested column with no usable pairs fails closed as inconclusive.
+    missing, blank, or non-finite requested inputs fail closed with a reason code.
     """
     _validate_threshold(correlation_threshold, "correlation_threshold")
     columns = tuple(dict.fromkeys(post_fight_columns))
-    if not columns:
-        return LeakageResult(field_name, {}, correlation_threshold, True, ())
+    if not columns or any(not isinstance(column, str) or not column.strip() for column in columns):
+        return LeakageResult(
+            field_name,
+            {},
+            correlation_threshold,
+            False,
+            (LEAKAGE_COLUMNS_REQUIRED,),
+        )
 
     correlations: dict[str, float] = {}
     reasons: list[str] = []
     for column in columns:
-        pairs = [
-            (candidate_value, post_value)
-            for row in rows
-            for candidate_value, post_value in [_numeric_pair(row.get(field_name), row.get(column))]
-            if candidate_value is not None and post_value is not None
-        ]
+        pairs: list[tuple[float, float]] = []
+        has_nonfinite_input = False
+        for row in rows:
+            candidate_raw = row.get(field_name)
+            post_raw = row.get(column)
+            if _is_nonfinite_number(candidate_raw) or _is_nonfinite_number(post_raw):
+                has_nonfinite_input = True
+                continue
+            candidate_value, post_value = _numeric_pair(candidate_raw, post_raw)
+            if candidate_value is not None and post_value is not None:
+                pairs.append((candidate_value, post_value))
+        if has_nonfinite_input:
+            reasons.append(NONFINITE_LEAKAGE_INPUT)
+            continue
         if len(pairs) < 2:
             reasons.append(LEAKAGE_TEST_INCONCLUSIVE)
             continue
-        correlations[column] = abs(_pearson_correlation(pairs))
-        if correlations[column] >= correlation_threshold:
+        try:
+            correlation = abs(_pearson_correlation(pairs))
+        except (ArithmeticError, ValueError):
+            correlation = math.nan
+        if not math.isfinite(correlation):
+            reasons.append(NONFINITE_LEAKAGE_CORRELATION)
+            continue
+        correlations[column] = correlation
+        if correlation >= correlation_threshold:
             reasons.append(LEAKAGE_DETECTED)
 
+    unique_reasons = tuple(dict.fromkeys(reasons))
     return LeakageResult(
         field_name=field_name,
         correlations=correlations,
         threshold=correlation_threshold,
-        passed=not reasons,
-        reason_codes=tuple(dict.fromkeys(reasons)),
+        passed=not unique_reasons,
+        reason_codes=unique_reasons,
     )
 
 
@@ -333,16 +365,25 @@ def write_validation_report(
     return report_path
 
 
-def _resolve_join_key(
+def _validate_join_keys(
     candidate_rows: Sequence[Row], source_rows: Sequence[Row], requested_key: str
 ) -> str | None:
-    """Use the requested key, with common offline fixture key fallbacks."""
+    """Reject missing, unhashable, or duplicate requested join keys."""
+    if not candidate_rows or not source_rows:
+        return None
     all_rows = (*candidate_rows, *source_rows)
-    if candidate_rows and source_rows and all(requested_key in row for row in all_rows):
-        return requested_key
-    for key in ("fighter_url", "fight_url", "fighter_id", "id", "name"):
-        if candidate_rows and source_rows and all(key in row for row in all_rows):
-            return key
+    for row in all_rows:
+        value = row.get(requested_key)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return MISSING_JOIN_KEY
+        try:
+            hash(value)
+        except TypeError:
+            return AMBIGUOUS_JOIN_KEY
+    for rows in (candidate_rows, source_rows):
+        keys = [row[requested_key] for row in rows]
+        if len(keys) != len(set(keys)):
+            return DUPLICATE_JOIN_KEY
     return None
 
 
@@ -352,13 +393,26 @@ def _values_match(left: object, right: object) -> bool:
     return str(left).strip().casefold() == str(right).strip().casefold()
 
 
+def _is_nonfinite_number(value: object) -> bool:
+    if value is None or isinstance(value, bool):
+        return False
+    try:
+        return not math.isfinite(float(value))
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
 def _numeric_pair(left: object, right: object) -> tuple[float | None, float | None]:
     if isinstance(left, bool) or isinstance(right, bool):
         return None, None
     try:
-        return float(left), float(right)
-    except (TypeError, ValueError):
+        left_value = float(left)
+        right_value = float(right)
+    except (TypeError, ValueError, OverflowError):
         return None, None
+    if not math.isfinite(left_value) or not math.isfinite(right_value):
+        return None, None
+    return left_value, right_value
 
 
 def _pearson_correlation(pairs: Sequence[tuple[float, float]]) -> float:
