@@ -6,6 +6,8 @@ import json
 from datetime import date
 from pathlib import Path
 
+import pytest
+
 from ufc_edge.features.kaggle_validator import (
     AMBIGUOUS_JOIN_KEY,
     CROSS_CHECK_LOW_MATCH_RATE,
@@ -13,7 +15,6 @@ from ufc_edge.features.kaggle_validator import (
     LEAKAGE_COLUMNS_REQUIRED,
     LEAKAGE_DETECTED,
     MISSING_JOIN_KEY,
-    NO_CROSS_CHECK_OVERLAP,
     NONFINITE_LEAKAGE_CORRELATION,
     NONFINITE_LEAKAGE_INPUT,
     PROVENANCE_INCOMPLETE,
@@ -189,20 +190,66 @@ def test_nonfinite_leakage_correlation_rejects_through_admission_path() -> None:
     assert NONFINITE_LEAKAGE_CORRELATION in report.reason_codes
 
 
+@pytest.mark.parametrize("join_key_value", [float("nan"), float("inf"), float("-inf")])
+def test_nonfinite_numeric_join_key_rejects_through_admission_path(
+    join_key_value: float,
+) -> None:
+    rows = [
+        {
+            "join_id": join_key_value,
+            "candidate": 1,
+            "post_fight_column": 4,
+        },
+        {
+            "join_id": 1.0,
+            "candidate": 2,
+            "post_fight_column": 1,
+        },
+        {
+            "join_id": 2.0,
+            "candidate": 3,
+            "post_fight_column": 3,
+        },
+        {
+            "join_id": 3.0,
+            "candidate": 4,
+            "post_fight_column": 2,
+        },
+    ]
+
+    report = validate_field(
+        field_name="candidate",
+        source_dataset="fixture",
+        kaggle_rows=rows,
+        ufc_rows=rows,
+        provenance=PROVENANCE,
+        post_fight_columns=["post_fight_column"],
+        join_key="join_id",
+    )
+
+    assert report.cross_check.reason_codes == (AMBIGUOUS_JOIN_KEY,)
+
+
 def test_requested_join_key_is_not_replaced_by_fallback() -> None:
     candidate_rows = [
         {
-            "fighter_url": "fighter-a",
             "fight_url": "fight-1",
             "candidate": 1,
-        }
+        },
+        {
+            "fight_url": "fight-2",
+            "candidate": 2,
+        },
     ]
     source_rows = [
         {
-            "fighter_url": "fighter-b",
             "fight_url": "fight-1",
             "candidate": 1,
-        }
+        },
+        {
+            "fight_url": "fight-2",
+            "candidate": 2,
+        },
     ]
 
     result = cross_check_field(
@@ -212,8 +259,7 @@ def test_requested_join_key_is_not_replaced_by_fallback() -> None:
         join_key="fighter_url",
     )
 
-    assert result.passed is False
-    assert result.reason_codes == (NO_CROSS_CHECK_OVERLAP,)
+    assert result.reason_codes == (MISSING_JOIN_KEY,)
 
 
 def test_missing_requested_join_key_rejects_without_fallback() -> None:

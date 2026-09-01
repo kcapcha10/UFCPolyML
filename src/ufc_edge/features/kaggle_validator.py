@@ -368,7 +368,7 @@ def write_validation_report(
 def _validate_join_keys(
     candidate_rows: Sequence[Row], source_rows: Sequence[Row], requested_key: str
 ) -> str | None:
-    """Reject missing, unhashable, or duplicate requested join keys."""
+    """Reject missing, non-finite, unhashable, or duplicate requested join keys."""
     if not candidate_rows or not source_rows:
         return None
     all_rows = (*candidate_rows, *source_rows)
@@ -376,6 +376,8 @@ def _validate_join_keys(
         value = row.get(requested_key)
         if value is None or (isinstance(value, str) and not value.strip()):
             return MISSING_JOIN_KEY
+        if _is_nonfinite_join_key(value):
+            return AMBIGUOUS_JOIN_KEY
         try:
             hash(value)
         except TypeError:
@@ -385,6 +387,15 @@ def _validate_join_keys(
         if len(keys) != len(set(keys)):
             return DUPLICATE_JOIN_KEY
     return None
+
+
+def _is_nonfinite_join_key(value: object) -> bool:
+    if value is None or isinstance(value, bool):
+        return False
+    try:
+        return not math.isfinite(value)
+    except (TypeError, ValueError, OverflowError):
+        return False
 
 
 def _values_match(left: object, right: object) -> bool:
