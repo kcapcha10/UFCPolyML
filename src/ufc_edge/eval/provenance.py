@@ -18,6 +18,7 @@ from pathlib import Path
 import joblib
 import mlflow
 import xgboost as xgb
+from mlflow.tracking import MlflowClient
 from pydantic import BaseModel
 
 from ufc_edge.eval.calibration import CalibratorProtocol
@@ -27,7 +28,8 @@ from ufc_edge.eval.schemas import (
     Fold,
     ReliabilityBucket,
 )
-from ufc_edge.model.schemas import AssemblyManifest
+from ufc_edge.model.schemas import AssemblyManifest, CandidateConfig
+from ufc_edge.model.train import FoldCandidateResult
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -157,27 +159,126 @@ def _log_calibrator(calibrator: CalibratorProtocol) -> None:
         mlflow.log_artifact(str(path))
 
 
+# Behavior/params/return: serialize all candidate fold scores and the selection rationale.
+# Assumes: candidate_results contains the complete typed result set used for selection.
+def _candidate_comparison(
+    candidate_results: Sequence[FoldCandidateResult],
+    selected_candidate: CandidateConfig,
+) -> dict[str, object]:
+    """Serialize candidate scores, tie-break inputs, and the winning rationale."""
+    if not candidate_results:
+        raise ValueError("candidate_results must contain at least one candidate")
+
+    grouped: dict[str, list[FoldCandidateResult]] = {}
+    for result in candidate_results:
+        key = result.candidate_config.model_dump_json()
+        grouped.setdefault(key, []).append(result)
+
+    candidates: list[dict[str, object]] = []
+    for results in grouped.values():
+        ordered_results = sorted(results, key=lambda result: result.fold_id)
+        mean_scores = {
+            "mean_calibrated_brier": sum(result.calibrated_brier for result in ordered_results)
+            / len(ordered_results),
+            "mean_log_loss": sum(result.log_loss for result in ordered_results)
+            / len(ordered_results),
+            "mean_ece": sum(result.ece for result in ordered_results) / len(ordered_results),
+        }
+        candidates.append(
+            {
+                "candidate_config": ordered_results[0].candidate_config.model_dump(mode="json"),
+                "fold_scores": [
+                    {
+                        "fold_id": result.fold_id,
+                        "calibrated_brier": result.calibrated_brier,
+                        "log_loss": result.log_loss,
+                        "ece": result.ece,
+                    }
+                    for result in ordered_results
+                ],
+                "mean_scores": mean_scores,
+            }
+        )
+
+    selected_config = selected_candidate.model_dump(mode="json")
+    winner = next(
+        (candidate for candidate in candidates if candidate["candidate_config"] == selected_config),
+        None,
+    )
+    if winner is None:
+        raise ValueError("selected_candidate is absent from candidate_results")
+
+    return {
+        "candidates": candidates,
+        "selection": {
+            "primary_metric": "mean_calibrated_brier",
+            "tie_breakers": ["mean_log_loss", "mean_ece"],
+            "winner": selected_candidate.model_dump(mode="json"),
+            "winner_scores": winner["mean_scores"],
+            "winner_rationale": {
+                "criterion_order": [
+                    "mean_calibrated_brier",
+                    "mean_log_loss",
+                    "mean_ece",
+                ],
+                "explanation": (
+                    "The upstream candidate selector ranks candidates by ascending "
+                    "mean calibrated Brier; ties are resolved by lower mean log "
+                    "loss, then lower mean ECE."
+                ),
+            },
+        },
+    }
+
+
+# Behavior/params/return: obtain an MLflow client bound to the active tracking store.
+# Assumes: MLflow's tracking URI identifies the store containing the active run.
+def _tracking_client() -> MlflowClient:
+    """Return a client for run-ID-addressed status and tag operations."""
+    return MlflowClient(tracking_uri=mlflow.get_tracking_uri())
+
+
+# Behavior/params/return: finalize a run before publishing its complete tag.
+# Assumes/errors: any finalization or cleanup failure propagates to failure handling.
+def _finalize_run(run_id: str) -> None:
+    """Terminate the captured run successfully, then publish its complete tag."""
+    client = _tracking_client()
+    client.set_terminated(run_id, status="FINISHED")
+    mlflow.end_run(status="FINISHED")
+    client.set_tag(run_id, "provenance_status", "complete", synchronous=True)
+
+
 # Behavior/params/return: close a partially logged run as failed without hiding cleanup errors.
 # Assumes/errors: MLflow may reject either the failure tag or termination independently.
 def _mark_run_failed(run_id: str, error: Exception) -> None:
     """Mark a partially logged run failed and always attempt to terminate it."""
     try:
-        mlflow.set_tags(
-            {
-                "provenance_status": "failed",
-                "provenance_error": str(error)[:500],
-            },
-            synchronous=True,
-        )
+        client = _tracking_client()
     except Exception:
-        _LOGGER.exception("Failed to tag MLflow run %s as failed", run_id)
+        _LOGGER.exception("Failed to create MLflow client for run %s", run_id)
+        client = None
 
-    # These operations are deliberately separate: a tag-write failure must not
-    # leave the run RUNNING and accidentally eligible for downstream queries.
+    if client is not None:
+        for key, value in {
+            "provenance_status": "failed",
+            "provenance_error": str(error)[:500],
+        }.items():
+            try:
+                client.set_tag(run_id, key, value, synchronous=True)
+            except Exception:
+                _LOGGER.exception("Failed to tag MLflow run %s as failed", run_id)
+
+        # These operations are deliberately separate: a tag-write failure must not
+        # leave the run RUNNING and accidentally eligible for downstream queries.
+        try:
+            client.set_terminated(run_id, status="FAILED")
+        except Exception:
+            _LOGGER.exception("Failed to terminate failed MLflow run %s", run_id)
+
     try:
         mlflow.end_run(status="FAILED")
     except Exception:
-        _LOGGER.exception("Failed to terminate failed MLflow run %s", run_id)
+        _LOGGER.exception("Failed to close fluent MLflow run %s", run_id)
 
 
 # Behavior/params/return: return a completed MLflow run ID.
@@ -192,6 +293,8 @@ def log_training_run(
     reliability: list[ReliabilityBucket],
     ablation: list[AblationRungResult] | None,
     manifest: AssemblyManifest,
+    candidate_results: Sequence[FoldCandidateResult],
+    selected_candidate: CandidateConfig,
 ) -> str:
     """Log a complete model/evaluation run and return its MLflow run ID.
 
@@ -204,6 +307,10 @@ def log_training_run(
         reliability: Typed probability-bucket reliability output.
         ablation: Optional typed feature-family ablation output.
         manifest: Typed matrix assembly and feature provenance metadata.
+        candidate_results: Complete typed per-fold scores for every candidate used
+            by upstream candidate selection.
+        selected_candidate: Candidate configuration returned by upstream
+            candidate selection.
 
     Raises:
         ProvenanceLoggingError: If any logging operation fails. The MLflow run is
@@ -235,12 +342,7 @@ def log_training_run(
             "reliability.json",
         )
         mlflow.log_dict(
-            {
-                "candidates": _to_jsonable(config.get("candidates", [])),
-                "fold_metrics": [
-                    metric.model_dump(mode="json") for metric in eval_report.fold_metrics
-                ],
-            },
+            _candidate_comparison(candidate_results, selected_candidate),
             "candidate_comparison.json",
         )
         if ablation is not None:
@@ -269,8 +371,7 @@ def log_training_run(
             },
         }
         mlflow.log_dict(run_manifest, "run_manifest.json")
-        mlflow.set_tag("provenance_status", "complete", synchronous=True)
-        mlflow.end_run(status="FINISHED")
+        _finalize_run(run_id)
         return run_id
     except Exception as error:
         # Do not let a partially logged run look successful to reporting queries.

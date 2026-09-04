@@ -21,7 +21,8 @@ from ufc_edge.eval.schemas import (
     FoldMetrics,
     ReliabilityBucket,
 )
-from ufc_edge.model.schemas import AssemblyManifest
+from ufc_edge.model.schemas import AssemblyManifest, CandidateConfig
+from ufc_edge.model.train import FoldCandidateResult
 
 
 @pytest.fixture
@@ -98,13 +99,6 @@ def provenance_inputs() -> dict[str, object]:
             low_support=True,
         )
     ]
-    ablation = [
-        AblationRungResult(
-            rung="naive",
-            brier=0.25,
-            brier_ci=(0.2, 0.3),
-        )
-    ]
     manifest = AssemblyManifest(
         n_rows=4,
         n_features=1,
@@ -114,6 +108,71 @@ def provenance_inputs() -> dict[str, object]:
         exclusions={},
         assembled_at="2026-08-30T11:00:00Z",
     )
+    ablation = [
+        AblationRungResult(
+            rung="naive",
+            brier=0.25,
+            brier_ci=(0.2, 0.3),
+        )
+    ]
+    candidate_configs = [
+        CandidateConfig(
+            n_estimators=n_estimators,
+            learning_rate=0.1,
+            max_depth=1,
+            min_child_weight=1.0,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            reg_alpha=0.0,
+            reg_lambda=1.0,
+        )
+        for n_estimators in (1, 2, 3)
+    ]
+    candidate_results = [
+        FoldCandidateResult(
+            candidate_config=candidate_configs[0],
+            fold_id=0,
+            calibrated_brier=0.20,
+            log_loss=0.60,
+            ece=0.20,
+        ),
+        FoldCandidateResult(
+            candidate_config=candidate_configs[0],
+            fold_id=1,
+            calibrated_brier=0.20,
+            log_loss=0.58,
+            ece=0.18,
+        ),
+        FoldCandidateResult(
+            candidate_config=candidate_configs[1],
+            fold_id=0,
+            calibrated_brier=0.20,
+            log_loss=0.50,
+            ece=0.30,
+        ),
+        FoldCandidateResult(
+            candidate_config=candidate_configs[1],
+            fold_id=1,
+            calibrated_brier=0.20,
+            log_loss=0.52,
+            ece=0.28,
+        ),
+        FoldCandidateResult(
+            candidate_config=candidate_configs[2],
+            fold_id=0,
+            calibrated_brier=0.25,
+            log_loss=0.40,
+            ece=0.10,
+        ),
+        FoldCandidateResult(
+            candidate_config=candidate_configs[2],
+            fold_id=1,
+            calibrated_brier=0.24,
+            log_loss=0.42,
+            ece=0.12,
+        ),
+    ]
+
     return {
         "config": {
             "random_seed": 42,
@@ -131,6 +190,8 @@ def provenance_inputs() -> dict[str, object]:
         "reliability": reliability,
         "ablation": ablation,
         "manifest": manifest,
+        "candidate_results": candidate_results,
+        "selected_candidate": candidate_configs[1],
     }
 
 
@@ -207,6 +268,45 @@ def test_typed_artifacts_preserve_evaluation_reliability_and_ablation(
     assert ablation["rungs"][0]["rung"] == "naive"
 
 
+def test_candidate_comparison_contains_scores_and_winning_rationale(
+    tracking_store: MlflowClient,
+    provenance_inputs: dict[str, object],
+) -> None:
+    """Candidate provenance preserves all scores and the deterministic selection reason."""
+    run_id = log_training_run(**provenance_inputs)
+
+    comparison = json.loads(
+        Path(tracking_store.download_artifacts(run_id, "candidate_comparison.json")).read_text()
+    )
+
+    candidates = comparison["candidates"]
+    assert len(candidates) == 3
+    assert {entry["candidate_config"]["n_estimators"] for entry in candidates} == {1, 2, 3}
+
+    winner = next(entry for entry in candidates if entry["candidate_config"]["n_estimators"] == 2)
+    assert winner["candidate_config"]["n_estimators"] == 2
+    assert winner["fold_scores"] == [
+        {"fold_id": 0, "calibrated_brier": 0.2, "log_loss": 0.5, "ece": 0.3},
+        {"fold_id": 1, "calibrated_brier": 0.2, "log_loss": 0.52, "ece": 0.28},
+    ]
+    assert winner["mean_scores"] == {
+        "mean_calibrated_brier": 0.2,
+        "mean_log_loss": 0.51,
+        "mean_ece": 0.29000000000000004,
+    }
+
+    selection = comparison["selection"]
+    assert selection["primary_metric"] == "mean_calibrated_brier"
+    assert selection["tie_breakers"] == ["mean_log_loss", "mean_ece"]
+    assert selection["winner"]["n_estimators"] == 2
+    assert selection["winner_rationale"]["criterion_order"] == [
+        "mean_calibrated_brier",
+        "mean_log_loss",
+        "mean_ece",
+    ]
+    assert "ties are resolved" in selection["winner_rationale"]["explanation"]
+
+
 def test_artifact_failure_marks_run_failed_and_not_reportable(
     monkeypatch: pytest.MonkeyPatch,
     tracking_store: MlflowClient,
@@ -240,6 +340,48 @@ def test_artifact_failure_marks_run_failed_and_not_reportable(
     assert (
         tracking_store.search_runs(
             experiment_ids=[failed_runs[0].info.experiment_id],
+            filter_string="tags.provenance_status = 'complete'",
+        )
+        == []
+    )
+
+
+def test_finalization_failure_does_not_publish_complete_run(
+    monkeypatch: pytest.MonkeyPatch,
+    tracking_store: MlflowClient,
+    provenance_inputs: dict[str, object],
+) -> None:
+    """A failed finalization is converted to a failed, non-reportable run."""
+    original_set_terminated = MlflowClient.set_terminated
+    termination_attempts: list[tuple[str, str | None]] = []
+
+    def fail_success_finalization(
+        client: MlflowClient,
+        run_id: str,
+        status: str | None = None,
+        end_time: int | None = None,
+    ) -> None:
+        termination_attempts.append((run_id, status))
+        if status == "FINISHED":
+            raise OSError("forced finalization failure")
+        original_set_terminated(client, run_id, status=status, end_time=end_time)
+
+    monkeypatch.setattr(MlflowClient, "set_terminated", fail_success_finalization)
+
+    with pytest.raises(ProvenanceLoggingError, match="forced finalization failure"):
+        log_training_run(**provenance_inputs)
+
+    assert len({run_id for run_id, _ in termination_attempts}) == 1
+    experiment_id = tracking_store.get_experiment_by_name("provenance-tests").experiment_id
+    failed_runs = tracking_store.search_runs(
+        experiment_ids=[experiment_id],
+        filter_string="attributes.status = 'FAILED'",
+    )
+    assert len(failed_runs) == 1
+    assert failed_runs[0].data.tags["provenance_status"] == "failed"
+    assert (
+        tracking_store.search_runs(
+            experiment_ids=[experiment_id],
             filter_string="tags.provenance_status = 'complete'",
         )
         == []
