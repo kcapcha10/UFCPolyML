@@ -498,7 +498,10 @@ class TestSymmetry:
     def test_canonical_probability_is_order_independent(self, pipeline: _PipelineResult) -> None:
         """The canonical-fighter probability is identical regardless of arg order."""
         matrix = pipeline.features_matrix
-        features_a, features_b = matrix[0], matrix[1]
+        # Mirror pairs (rows 0/1, 2/3, ...) are byte-identical, so distinct fights
+        # are needed for the arg swap to genuinely exercise canonical ordering.
+        features_a, features_b = matrix[0], matrix[2]
+        assert not np.array_equal(features_a, features_b)
         url_a, url_b = "http://fighter/aaa", "http://fighter/bbb"
         forward = self._predict(pipeline, features_a, features_b, url_a, url_b)
         reverse = self._predict(pipeline, features_b, features_a, url_b, url_a)
