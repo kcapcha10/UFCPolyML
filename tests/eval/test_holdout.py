@@ -10,6 +10,7 @@ and refusing both re-scoring and any post-holdout modeling change via
 
 from __future__ import annotations
 
+import math
 import random
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -23,6 +24,7 @@ from ufc_edge.eval.holdout import (
     HoldoutEvaluation,
     MlflowHoldoutLock,
     PostHoldoutLockError,
+    _brier_skill_bootstrap_ci,
     assert_unlocked,
     evaluate_holdout,
 )
@@ -198,6 +200,27 @@ class TestMarketRelativeMetrics:
         assert report.brier_skill is None
         assert report.permutation_p is None
         assert report.mde >= 0.0
+
+
+# ---------------------------------------------------------------------------
+# Brier-skill bootstrap CI degenerate case
+# ---------------------------------------------------------------------------
+
+
+class TestBrierSkillBootstrapCiDegenerate:
+    """An all-skipped bootstrap yields an undefined (NaN, NaN) interval, not an error."""
+
+    def test_all_replicates_skipped_returns_nan(self) -> None:
+        """A perfect market skips every replicate, so the CI is (NaN, NaN) not a raise."""
+        # market_prob == outcome on every fight drives brier_market to 0 in every
+        # replicate, so all are skipped and no percentile can be computed.
+        matched = [
+            ("http://evt/000", 0.7, 1.0, 1),
+            ("http://evt/001", 0.4, 0.0, 0),
+        ]
+        lower, upper = _brier_skill_bootstrap_ci(matched, n_bootstrap=50, alpha=0.05, seed=0)
+        assert math.isnan(lower)
+        assert math.isnan(upper)
 
 
 # ---------------------------------------------------------------------------

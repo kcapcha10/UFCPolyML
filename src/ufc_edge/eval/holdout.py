@@ -366,6 +366,11 @@ def _brier_skill_bootstrap_ci(
             continue
         skills.append(1.0 - float(np.mean(model_sq)) / brier_market)
 
+    # Every replicate can be skipped when the market is a perfect predictor
+    # (brier_market == 0 in all samples); the skill interval is then undefined.
+    if not skills:
+        return (float("nan"), float("nan"))
+
     lower_pct = 100.0 * (alpha / 2)
     upper_pct = 100.0 * (1 - alpha / 2)
     return (float(np.percentile(skills, lower_pct)), float(np.percentile(skills, upper_pct)))
