@@ -1,0 +1,43 @@
+[
+  {
+    "_comment": "Development fixture with 5 entries. The full 30-50 hand-labeled set is a human deliverable — these synthetic entries exist only to exercise the eval harness logic during development and CI. Do NOT fabricate additional labels to simulate a real evaluation; expand this fixture only with genuine human-reviewed ground-truth labels.",
+    "fight_url": "/fight/mcgregor-poirier-3",
+    "event_date": "2021-07-10",
+    "fighter_a": "Conor McGregor",
+    "fighter_b": "Dustin Poirier",
+    "ground_truth_concern": true,
+    "notes": "McGregor leg injury during fight was preceded by pre-fight reports of shin stress fractures in camp — a discoverable concern at fight time."
+  },
+  {
+    "fight_url": "/fight/chimaev-burns-1",
+    "event_date": "2022-04-09",
+    "fighter_a": "Khamzat Chimaev",
+    "fighter_b": "Gilbert Burns",
+    "ground_truth_concern": false,
+    "notes": "No material pre-fight concerns reported. Both fighters healthy and on schedule."
+  },
+  {
+    "fight_url": "/fight/oliveira-gaethje-1",
+    "event_date": "2022-05-07",
+    "fighter_a": "Charles Oliveira",
+    "fighter_b": "Justin Gaethje",
+    "ground_truth_concern": true,
+    "notes": "Oliveira missed weight (stripped of title on weigh-in day) — a clear discoverable concern at fight time."
+  },
+  {
+    "fight_url": "/fight/ngannou-gane-1",
+    "event_date": "2022-01-22",
+    "fighter_a": "Francis Ngannou",
+    "fighter_b": "Ciryl Gane",
+    "ground_truth_concern": true,
+    "notes": "Ngannou disclosed knee injury (torn MCL/ACL) post-fight, but camp reports of limited training surfaced pre-fight — marginally discoverable."
+  },
+  {
+    "fight_url": "/fight/adesanya-pereira-2",
+    "event_date": "2023-04-08",
+    "fighter_a": "Israel Adesanya",
+    "fighter_b": "Alex Pereira",
+    "ground_truth_concern": false,
+    "notes": "No material pre-fight concerns. Both fighters healthy, full camps reported."
+  }
+]
