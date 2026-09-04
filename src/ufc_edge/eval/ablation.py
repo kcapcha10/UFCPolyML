@@ -322,9 +322,7 @@ def _calibrate_predictions(
     n_cal = len(raw_cal)
     min_size = min(_MIN_CALIBRATION_SIZE, n_cal)
 
-    calibrators = fit_calibrators(
-        raw_cal, y_cal, min_calibration_size=min_size
-    )
+    calibrators = fit_calibrators(raw_cal, y_cal, min_calibration_size=min_size)
     _, best_calibrator = select_calibrator(calibrators, raw_cal, y_cal)
     return best_calibrator.transform(raw_test)
 

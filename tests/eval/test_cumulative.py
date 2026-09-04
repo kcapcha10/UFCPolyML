@@ -37,13 +37,15 @@ def _make_period(
     """Generate a synthetic period with known Brier values plus small noise."""
     rng = np.random.default_rng(seed)
     model_brier = (
-        np.full(n_fights, model_mean_brier)
-        + rng.normal(0, noise_scale, n_fights)
-    ).clip(0, 1).tolist()
+        (np.full(n_fights, model_mean_brier) + rng.normal(0, noise_scale, n_fights))
+        .clip(0, 1)
+        .tolist()
+    )
     market_brier = (
-        np.full(n_fights, market_mean_brier)
-        + rng.normal(0, noise_scale, n_fights)
-    ).clip(0, 1).tolist()
+        (np.full(n_fights, market_mean_brier) + rng.normal(0, noise_scale, n_fights))
+        .clip(0, 1)
+        .tolist()
+    )
     return PeriodData(
         event_id=event_id,
         as_of_date=as_of_date,
@@ -108,8 +110,7 @@ class TestSeriesGrowth:
     def test_multiple_periods_grow_series(self) -> None:
         """Adding 5 periods produces a 5-point series."""
         periods = [
-            _make_period(f"event_{i}", date(2026, 3, i + 1), n_fights=8, seed=i)
-            for i in range(5)
+            _make_period(f"event_{i}", date(2026, 3, i + 1), n_fights=8, seed=i) for i in range(5)
         ]
         result = update_cumulative_evidence([], periods)
         assert len(result) == 5
@@ -117,12 +118,9 @@ class TestSeriesGrowth:
     def test_incremental_append_grows_by_one(self) -> None:
         """Adding one more period to an existing set grows by one."""
         periods_a = [
-            _make_period(f"event_{i}", date(2026, 3, i + 1), n_fights=10, seed=i)
-            for i in range(3)
+            _make_period(f"event_{i}", date(2026, 3, i + 1), n_fights=10, seed=i) for i in range(3)
         ]
-        periods_b = periods_a + [
-            _make_period("event_3", date(2026, 3, 4), n_fights=10, seed=3)
-        ]
+        periods_b = periods_a + [_make_period("event_3", date(2026, 3, 4), n_fights=10, seed=3)]
         result_a = update_cumulative_evidence([], periods_a)
         result_b = update_cumulative_evidence([], periods_b)
         assert len(result_b) == len(result_a) + 1
@@ -181,9 +179,7 @@ class TestCIBandNarrowing:
             )
             for i in range(20)
         ]
-        result = update_cumulative_evidence(
-            [], periods, n_bootstrap=2000, seed=99
-        )
+        result = update_cumulative_evidence([], periods, n_bootstrap=2000, seed=99)
 
         # CI width at point 2 (after 2 events) vs point 19 (after 20 events)
         early_width = result[1].ci_upper - result[1].ci_lower
@@ -209,9 +205,7 @@ class TestCIBandNarrowing:
             )
             for i in range(24)
         ]
-        result = update_cumulative_evidence(
-            [], periods, n_bootstrap=2000, seed=77
-        )
+        result = update_cumulative_evidence([], periods, n_bootstrap=2000, seed=77)
 
         widths = [p.ci_upper - p.ci_lower for p in result]
         # Compare first 6 points (few events) vs last 6 points (many events)
@@ -262,15 +256,11 @@ class TestIncrementalConsistency:
         # Compute incrementally
         incremental_results: list[CumulativePoint] = []
         for k in range(1, len(periods) + 1):
-            result = update_cumulative_evidence(
-                [], periods[:k], n_bootstrap=1000, seed=42
-            )
+            result = update_cumulative_evidence([], periods[:k], n_bootstrap=1000, seed=42)
             incremental_results.append(result[-1])
 
         # Compute all at once
-        one_shot = update_cumulative_evidence(
-            [], periods, n_bootstrap=1000, seed=42
-        )
+        one_shot = update_cumulative_evidence([], periods, n_bootstrap=1000, seed=42)
 
         for inc_pt, one_pt in zip(incremental_results, one_shot, strict=True):
             assert inc_pt.brier_skill == pytest.approx(one_pt.brier_skill, abs=1e-12)
@@ -286,12 +276,8 @@ class TestIncrementalConsistency:
         result = update_cumulative_evidence([], periods, seed=42)
 
         # Direct computation over all fight data
-        all_model = np.concatenate(
-            [np.array(p.model_brier_per_fight) for p in periods]
-        )
-        all_market = np.concatenate(
-            [np.array(p.market_brier_per_fight) for p in periods]
-        )
+        all_model = np.concatenate([np.array(p.model_brier_per_fight) for p in periods])
+        all_market = np.concatenate([np.array(p.market_brier_per_fight) for p in periods])
         direct_skill = _compute_brier_skill(all_model, all_market)
 
         assert result[-1].brier_skill == pytest.approx(direct_skill, abs=1e-12)
@@ -325,10 +311,7 @@ class TestEdgeCases:
     def test_dates_preserved_in_output(self) -> None:
         """Output points preserve the as_of_date from input periods."""
         dates = [date(2026, 1, 10), date(2026, 2, 15), date(2026, 3, 20)]
-        periods = [
-            _make_period(f"event_{i}", dates[i], n_fights=5, seed=i)
-            for i in range(3)
-        ]
+        periods = [_make_period(f"event_{i}", dates[i], n_fights=5, seed=i) for i in range(3)]
         result = update_cumulative_evidence([], periods)
         assert [p.as_of_date for p in result] == dates
 
@@ -353,9 +336,7 @@ class TestEdgeCases:
             _make_period(f"event_{i}", date(2026, 8, i + 1), n_fights=20, seed=i + 300)
             for i in range(10)
         ]
-        result = update_cumulative_evidence(
-            [], periods, n_bootstrap=3000, seed=55
-        )
+        result = update_cumulative_evidence([], periods, n_bootstrap=3000, seed=55)
         # Check last few points (more data → more stable)
         for pt in result[5:]:
             assert pt.ci_lower <= pt.brier_skill <= pt.ci_upper
