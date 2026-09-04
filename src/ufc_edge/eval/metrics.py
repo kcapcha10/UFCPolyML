@@ -128,3 +128,124 @@ def event_bootstrap_ci(
     lower_pct = 100.0 * (alpha / 2)
     upper_pct = 100.0 * (1 - alpha / 2)
     return (float(np.percentile(scores, lower_pct)), float(np.percentile(scores, upper_pct)))
+
+
+# ---------------------------------------------------------------------------
+# History-depth stratification
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class StratumMetrics:
+    """Brier and ECE for a single stratum of fights.
+
+    Fighters with very few prior UFC fights are the least-informed predictions
+    the model makes, so their calibration quality is measured and reported
+    separately instead of being averaged away into the overall number. Metrics
+    are ``None`` when the stratum has no fights and therefore has no data.
+    """
+
+    n_fights: int
+    brier: float | None
+    ece: float | None
+
+
+@dataclass(frozen=True)
+class StratifiedMetrics:
+    """Per-stratum and overall metrics split by fighter history depth.
+
+    The sparse group contains fights where the lesser-experienced fighter has
+    at most `threshold` prior UFC bouts. The remainder form the non-sparse group.
+    """
+
+    sparse: StratumMetrics
+    non_sparse: StratumMetrics
+    threshold: int
+
+
+def stratify_by_history_depth(
+    predictions: list[FightPrediction],
+    fighter_a_prior_ufc_fights: list[int],
+    fighter_b_prior_ufc_fights: list[int],
+    threshold: int = 3,
+    n_bins: int = 10,
+) -> StratifiedMetrics:
+    """Split predictions by history depth and report Brier/ECE per stratum.
+
+    Each fight's history depth is computed as the lesser of both fighters'
+    prior-UFC-fight counts. A fight is tagged SPARSE_HISTORY when that minimum
+    is at or below the threshold.
+
+    This separates out fights where at least one competitor has very little UFC
+    track record — the predictions the model is least confident about — so their
+    accuracy is visible rather than hidden inside aggregate numbers.
+
+    Params: predictions — fight outcomes with predicted probabilities.
+            fighter_a_prior_ufc_fights — prior count for fighter A per fight.
+            fighter_b_prior_ufc_fights — prior count for fighter B per fight.
+            threshold — at-or-below this count tags a fight as sparse (default 3).
+            n_bins — number of equal-width bins for ECE computation.
+    Returns: StratifiedMetrics with separate Brier/ECE for each group.
+    Assumes: all three per-fight inputs have equal length; counts are non-negative.
+    """
+    if len(predictions) != len(fighter_a_prior_ufc_fights) or len(predictions) != len(
+        fighter_b_prior_ufc_fights
+    ):
+        msg = (
+            "predictions, fighter_a_prior_ufc_fights, and "
+            "fighter_b_prior_ufc_fights must match in length"
+        )
+        raise ValueError(msg)
+
+    if any(count < 0 for count in fighter_a_prior_ufc_fights) or any(
+        count < 0 for count in fighter_b_prior_ufc_fights
+    ):
+        raise ValueError("prior UFC fight counts must contain only non-negative counts")
+
+    sparse_probs: list[float] = []
+    sparse_labels: list[int] = []
+    non_sparse_probs: list[float] = []
+    non_sparse_labels: list[int] = []
+
+    for pred, fighter_a_count, fighter_b_count in zip(
+        predictions,
+        fighter_a_prior_ufc_fights,
+        fighter_b_prior_ufc_fights,
+        strict=True,
+    ):
+        min_prior_ufc_fights = min(fighter_a_count, fighter_b_count)
+        if min_prior_ufc_fights <= threshold:
+            sparse_probs.append(pred.prob)
+            sparse_labels.append(pred.label)
+        else:
+            non_sparse_probs.append(pred.prob)
+            non_sparse_labels.append(pred.label)
+
+    sparse_probs_arr = np.array(sparse_probs, dtype=np.float64)
+    sparse_labels_arr = np.array(sparse_labels, dtype=np.float64)
+    non_sparse_probs_arr = np.array(non_sparse_probs, dtype=np.float64)
+    non_sparse_labels_arr = np.array(non_sparse_labels, dtype=np.float64)
+
+    sparse_metrics = StratumMetrics(
+        n_fights=len(sparse_probs),
+        brier=brier_score(sparse_probs_arr, sparse_labels_arr) if sparse_probs else None,
+        ece=expected_calibration_error(sparse_probs_arr, sparse_labels_arr, n_bins=n_bins)
+        if sparse_probs
+        else None,
+    )
+
+    non_sparse_metrics = StratumMetrics(
+        n_fights=len(non_sparse_probs),
+        brier=brier_score(non_sparse_probs_arr, non_sparse_labels_arr)
+        if non_sparse_probs
+        else None,
+        ece=expected_calibration_error(non_sparse_probs_arr, non_sparse_labels_arr, n_bins=n_bins)
+        if non_sparse_probs
+        else None,
+    )
+
+    return StratifiedMetrics(
+        sparse=sparse_metrics,
+        non_sparse=non_sparse_metrics,
+        threshold=threshold,
+    )
