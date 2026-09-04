@@ -3,8 +3,10 @@
 Exercises run_report over a fixture DuckDB and a local temporary MLflow run:
 matched bouts get full model-vs-market columns, unmatched bouts get null
 probability fields, flagged signals trigger annotate-only due diligence and
-post-signal snapshot scheduling, reruns append new rows without mutating prior
-ones, and a run whose MLflow artifacts are missing fails before any write.
+post-signal snapshot scheduling, a due-diligence failure still leaves the
+flagged signal intact with snapshots scheduled and no verdict written, reruns
+append new rows without mutating prior ones, and a run whose MLflow artifacts
+are missing fails before any write.
 
 All external boundaries (model inference, LLM, search) are injected fakes; the
 only "real" dependency is a file-backed MLflow store created under tmp_path.
@@ -22,6 +24,7 @@ import pytest
 from mlflow.tracking import MlflowClient
 
 from ufc_edge.data.polymarket.storage import POLYMARKET_DDL
+from ufc_edge.report.due_diligence import DueDiligenceError
 from ufc_edge.report.runner import (
     MissingArtifactError,
     RunnerConfig,
@@ -102,6 +105,22 @@ class _RecordingLLM:
                 },
             }
         )
+
+
+class _FailingLLM:
+    """Fake LLM client that always fails, standing in for a provider/timeout error.
+
+    Raises DueDiligenceError — the exact failure the runner's annotate-only path is
+    documented to swallow — and counts calls so tests can confirm the flagged
+    signal's due-diligence path was actually exercised before it failed.
+    """
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def __call__(self, prompt: str) -> str:
+        self.calls += 1
+        raise DueDiligenceError("simulated due-diligence failure")
 
 
 def _fake_search(query: str) -> list[str]:
@@ -251,6 +270,11 @@ def predictor() -> _RecordingPredictor:
 @pytest.fixture
 def llm() -> _RecordingLLM:
     return _RecordingLLM()
+
+
+@pytest.fixture
+def failing_llm() -> _FailingLLM:
+    return _FailingLLM()
 
 
 def _reliability_buckets() -> list[dict]:
@@ -538,6 +562,141 @@ class TestSnapshotScheduling:
         ).fetchone()[0]
         # 1h, 4h, 24h, plus fight-time (event_start_time provided).
         assert count == 4
+
+
+class TestDueDiligenceFailure:
+    """A due-diligence failure is annotate-only: the flagged signal is never suppressed.
+
+    When due diligence raises DueDiligenceError for a flagged signal, the run still
+    completes, the flagged paper_signal row persists unchanged, post-signal snapshots
+    are still scheduled, and no verdict row is written — only a failed
+    due_diligence_runs row records the attempt.
+    """
+
+    def test_run_completes_when_due_diligence_fails(
+        self, conn, fights, config, predictor, failing_llm, mlflow_run_id
+    ):
+        report_run = run_report(
+            _AS_OF,
+            mlflow_run_id,
+            fights,
+            config,
+            conn,
+            predict_matchup=predictor,
+            llm_client=failing_llm,
+            search_client=_fake_search,
+        )
+        assert report_run.flagged_count == 1
+
+    def test_failure_path_is_exercised(
+        self, conn, fights, config, predictor, failing_llm, mlflow_run_id
+    ):
+        run_report(
+            _AS_OF,
+            mlflow_run_id,
+            fights,
+            config,
+            conn,
+            predict_matchup=predictor,
+            llm_client=failing_llm,
+            search_client=_fake_search,
+        )
+        assert failing_llm.calls == 1
+
+    def test_flagged_signal_row_survives_unchanged(
+        self, conn, fights, config, predictor, failing_llm, mlflow_run_id
+    ):
+        run_report(
+            _AS_OF,
+            mlflow_run_id,
+            fights,
+            config,
+            conn,
+            predict_matchup=predictor,
+            llm_client=failing_llm,
+            search_client=_fake_search,
+        )
+        row = conn.execute(
+            """
+            SELECT p_model, p_market_mid, mismatch, gate_verdict, bucket_id,
+                   bucket_n, token_id, snapshot_timestamp, match_status
+            FROM paper_signals WHERE fight_url = ?
+            """,
+            [_FIGHT_FLAGGED],
+        ).fetchone()
+        p_model, mid, mismatch, verdict, bucket_id, bucket_n, token, snap, status = row
+        assert p_model == pytest.approx(0.75)
+        assert mid == pytest.approx(0.50)
+        assert mismatch == pytest.approx(0.25)
+        assert verdict == GateVerdict.FLAGGED.value
+        assert bucket_id == "0.7-0.9"
+        assert bucket_n == 50
+        assert token == _TOKEN_FLAGGED
+        assert snap == _CAPTURED_AT
+        assert status == MatchStatus.MATCHED.value
+
+    def test_snapshots_still_scheduled_when_due_diligence_fails(
+        self, conn, fights, config, predictor, failing_llm, mlflow_run_id
+    ):
+        run_report(
+            _AS_OF,
+            mlflow_run_id,
+            fights,
+            config,
+            conn,
+            predict_matchup=predictor,
+            llm_client=failing_llm,
+            search_client=_fake_search,
+        )
+        signal_id = conn.execute(
+            "SELECT signal_id FROM paper_signals WHERE fight_url = ?",
+            [_FIGHT_FLAGGED],
+        ).fetchone()[0]
+        count = conn.execute(
+            "SELECT COUNT(*) FROM post_signal_snapshots WHERE signal_id = ?",
+            [signal_id],
+        ).fetchone()[0]
+        # Snapshot scheduling runs after due diligence is swallowed: 1h, 4h, 24h, fight-time.
+        assert count == 4
+
+    def test_no_verdict_written_when_due_diligence_fails(
+        self, conn, fights, config, predictor, failing_llm, mlflow_run_id
+    ):
+        run_report(
+            _AS_OF,
+            mlflow_run_id,
+            fights,
+            config,
+            conn,
+            predict_matchup=predictor,
+            llm_client=failing_llm,
+            search_client=_fake_search,
+        )
+        count = conn.execute(
+            "SELECT COUNT(*) FROM due_diligence_verdicts WHERE fight_url = ?",
+            [_FIGHT_FLAGGED],
+        ).fetchone()[0]
+        assert count == 0
+
+    def test_failed_due_diligence_run_is_logged(
+        self, conn, fights, config, predictor, failing_llm, mlflow_run_id
+    ):
+        run_report(
+            _AS_OF,
+            mlflow_run_id,
+            fights,
+            config,
+            conn,
+            predict_matchup=predictor,
+            llm_client=failing_llm,
+            search_client=_fake_search,
+        )
+        logged = conn.execute(
+            "SELECT success FROM due_diligence_runs WHERE fight_url = ?",
+            [_FIGHT_FLAGGED],
+        ).fetchall()
+        # Exactly one attempt, recorded as a failure — the failure is visible, not dropped.
+        assert logged == [(False,)]
 
 
 class TestAppendOnlyRerun:
