@@ -277,8 +277,12 @@ class TestEmitBeforeUpdate:
         feature_registry = _make_registry_with_columns({"test_col": float})
 
         fights = [
-            _make_fight(fight_url="fight://1", fighter_a_url="fighter://a", fighter_b_url="fighter://b"),
-            _make_fight(fight_url="fight://2", fighter_a_url="fighter://c", fighter_b_url="fighter://d"),
+            _make_fight(
+                fight_url="fight://1", fighter_a_url="fighter://a", fighter_b_url="fighter://b"
+            ),
+            _make_fight(
+                fight_url="fight://2", fighter_a_url="fighter://c", fighter_b_url="fighter://d"
+            ),
         ]
 
         replay(fights, registry_components, [emitter], feature_registry)
@@ -301,8 +305,12 @@ class TestEmitBeforeUpdate:
 
         # Run with 2 fights on the same card
         fights_full = [
-            _make_fight(fight_url="fight://1", fighter_a_url="fighter://a", fighter_b_url="fighter://b"),
-            _make_fight(fight_url="fight://2", fighter_a_url="fighter://c", fighter_b_url="fighter://d"),
+            _make_fight(
+                fight_url="fight://1", fighter_a_url="fighter://a", fighter_b_url="fighter://b"
+            ),
+            _make_fight(
+                fight_url="fight://2", fighter_a_url="fighter://c", fighter_b_url="fighter://d"
+            ),
         ]
         component_full = _TrackingComponent("tracker", call_log)
         registry_full = ComponentRegistry({"tracking": component_full})  # type: ignore[dict-item]
@@ -313,7 +321,9 @@ class TestEmitBeforeUpdate:
         call_log_partial: list[tuple[str, str]] = []
         emit_log_partial: list[dict[str, Any]] = []
         fights_partial = [
-            _make_fight(fight_url="fight://1", fighter_a_url="fighter://a", fighter_b_url="fighter://b"),
+            _make_fight(
+                fight_url="fight://1", fighter_a_url="fighter://a", fighter_b_url="fighter://b"
+            ),
         ]
         component_partial = _TrackingComponent("tracker", call_log_partial)
         registry_partial = ComponentRegistry({"tracking": component_partial})  # type: ignore[dict-item]
@@ -728,7 +738,10 @@ class TestMultiEventReplay:
         fight_urls = [r.fight_url for r in rows]
         # Within event://1, fights sorted by fight_url: a, a, b, b; then event://2: c, c
         assert fight_urls == [
-            "fight://a", "fight://a",
-            "fight://b", "fight://b",
-            "fight://c", "fight://c",
+            "fight://a",
+            "fight://a",
+            "fight://b",
+            "fight://b",
+            "fight://c",
+            "fight://c",
         ]

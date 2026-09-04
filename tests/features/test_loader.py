@@ -141,7 +141,9 @@ def _seed_complete_fight(
     _insert_fighter(conn, fighter_a_url, "Alpha")
     _insert_fighter(conn, fighter_b_url, "Bravo")
     _insert_fight(
-        conn, fight_url, event_url,
+        conn,
+        fight_url,
+        event_url,
         fighter_a_url=fighter_a_url,
         fighter_b_url=fighter_b_url,
         winner_url=winner_url,
@@ -160,17 +162,32 @@ class TestBasicLoading:
     def test_single_fight_all_fields_populated(self, conn) -> None:
         _insert_event(conn, "http://e/1", "UFC 300", date(2024, 4, 13))
         _insert_fighter(
-            conn, "http://f/a", "Alpha", height_cm=183.0, reach_cm=188.0,
-            stance="Orthodox", dob=date(1988, 3, 20),
+            conn,
+            "http://f/a",
+            "Alpha",
+            height_cm=183.0,
+            reach_cm=188.0,
+            stance="Orthodox",
+            dob=date(1988, 3, 20),
         )
         _insert_fighter(
-            conn, "http://f/b", "Bravo", height_cm=178.0, reach_cm=180.0,
-            stance="Southpaw", dob=date(1991, 11, 5),
+            conn,
+            "http://f/b",
+            "Bravo",
+            height_cm=178.0,
+            reach_cm=180.0,
+            stance="Southpaw",
+            dob=date(1991, 11, 5),
         )
         _insert_fight(
-            conn, "http://ft/1", "http://e/1",
-            method="KO/TKO", ending_round=2, ending_time="3:45",
-            time_format="3 Rnd (5-5-5)", weight_class="Lightweight",
+            conn,
+            "http://ft/1",
+            "http://e/1",
+            method="KO/TKO",
+            ending_round=2,
+            ending_time="3:45",
+            time_format="3 Rnd (5-5-5)",
+            weight_class="Lightweight",
         )
         _insert_totals(conn, "http://ft/1", "http://f/a", knockdowns=2, sig_landed=50)
         _insert_totals(conn, "http://ft/1", "http://f/b", knockdowns=0, sig_landed=25)
@@ -195,12 +212,22 @@ class TestBasicLoading:
     def test_fighter_profiles_populated(self, conn) -> None:
         _insert_event(conn, "http://e/1", "UFC 300", date(2024, 4, 13))
         _insert_fighter(
-            conn, "http://f/a", "Alpha", height_cm=183.0, reach_cm=188.0,
-            stance="Orthodox", dob=date(1988, 3, 20),
+            conn,
+            "http://f/a",
+            "Alpha",
+            height_cm=183.0,
+            reach_cm=188.0,
+            stance="Orthodox",
+            dob=date(1988, 3, 20),
         )
         _insert_fighter(
-            conn, "http://f/b", "Bravo", height_cm=178.0, reach_cm=180.0,
-            stance="Southpaw", dob=date(1991, 11, 5),
+            conn,
+            "http://f/b",
+            "Bravo",
+            height_cm=178.0,
+            reach_cm=180.0,
+            stance="Southpaw",
+            dob=date(1991, 11, 5),
         )
         _insert_fight(conn, "http://ft/1", "http://e/1")
         _insert_totals(conn, "http://ft/1", "http://f/a")
@@ -227,16 +254,34 @@ class TestBasicLoading:
         _insert_fighter(conn, "http://f/b")
         _insert_fight(conn, "http://ft/1", "http://e/1")
         _insert_totals(
-            conn, "http://ft/1", "http://f/a",
-            knockdowns=2, sig_landed=50, sig_att=80,
-            total_landed=70, total_att=100,
-            td_landed=4, td_att=6, sub_att=2, reversals=1, control_seconds=200,
+            conn,
+            "http://ft/1",
+            "http://f/a",
+            knockdowns=2,
+            sig_landed=50,
+            sig_att=80,
+            total_landed=70,
+            total_att=100,
+            td_landed=4,
+            td_att=6,
+            sub_att=2,
+            reversals=1,
+            control_seconds=200,
         )
         _insert_totals(
-            conn, "http://ft/1", "http://f/b",
-            knockdowns=0, sig_landed=30, sig_att=60,
-            total_landed=40, total_att=70,
-            td_landed=1, td_att=3, sub_att=0, reversals=0, control_seconds=90,
+            conn,
+            "http://ft/1",
+            "http://f/b",
+            knockdowns=0,
+            sig_landed=30,
+            sig_att=60,
+            total_landed=40,
+            total_att=70,
+            td_landed=1,
+            td_att=3,
+            sub_att=0,
+            reversals=0,
+            control_seconds=90,
         )
 
         result = load_historical_fights(conn)
@@ -275,7 +320,11 @@ class TestBasicLoading:
         _insert_fighter(conn, "http://f/a")
         _insert_fighter(conn, "http://f/b")
         _insert_fight(
-            conn, "http://ft/1", "http://e/1", winner_url=None, method="Draw",
+            conn,
+            "http://ft/1",
+            "http://e/1",
+            winner_url=None,
+            method="Draw",
         )
 
         result = load_historical_fights(conn)
@@ -323,14 +372,22 @@ class TestQuarantineExclusion:
 
     def test_quarantined_fight_excluded(self, conn) -> None:
         _seed_complete_fight(
-            conn, "http://ft/good", "http://e/1", "UFC 300", date(2024, 4, 13),
-            fighter_a_url="http://f/a", fighter_b_url="http://f/b",
+            conn,
+            "http://ft/good",
+            "http://e/1",
+            "UFC 300",
+            date(2024, 4, 13),
+            fighter_a_url="http://f/a",
+            fighter_b_url="http://f/b",
         )
         _insert_fighter(conn, "http://f/c", "Charlie")
         _insert_fighter(conn, "http://f/d", "Delta")
         _insert_fight(
-            conn, "http://ft/bad", "http://e/1",
-            fighter_a_url="http://f/c", fighter_b_url="http://f/d",
+            conn,
+            "http://ft/bad",
+            "http://e/1",
+            fighter_a_url="http://f/c",
+            fighter_b_url="http://f/d",
             winner_url="http://f/c",
         )
         _insert_totals(conn, "http://ft/bad", "http://f/c")
@@ -345,7 +402,11 @@ class TestQuarantineExclusion:
     def test_non_fight_quarantine_does_not_exclude(self, conn) -> None:
         """Quarantine entries for other tables don't affect fight loading."""
         _seed_complete_fight(
-            conn, "http://ft/1", "http://e/1", "UFC 300", date(2024, 4, 13),
+            conn,
+            "http://ft/1",
+            "http://e/1",
+            "UFC 300",
+            date(2024, 4, 13),
         )
         conn.execute(
             "INSERT INTO validation_quarantine VALUES (?, ?, ?, ?, ?, ?)",
@@ -358,7 +419,11 @@ class TestQuarantineExclusion:
 
     def test_all_quarantined_returns_empty(self, conn) -> None:
         _seed_complete_fight(
-            conn, "http://ft/1", "http://e/1", "UFC 300", date(2024, 4, 13),
+            conn,
+            "http://ft/1",
+            "http://e/1",
+            "UFC 300",
+            date(2024, 4, 13),
         )
         _quarantine_fight(conn, "http://ft/1")
 
@@ -372,7 +437,11 @@ class TestBoutOrder:
 
     def test_bout_order_is_none(self, conn) -> None:
         _seed_complete_fight(
-            conn, "http://ft/1", "http://e/1", "UFC 300", date(2024, 4, 13),
+            conn,
+            "http://ft/1",
+            "http://e/1",
+            "UFC 300",
+            date(2024, 4, 13),
         )
 
         result = load_historical_fights(conn)

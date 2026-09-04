@@ -223,9 +223,7 @@ class TestWriteStaging:
     ) -> None:
         write_staging(conn, sample_rows, registry)
         staging = staging_table_name()
-        rows = conn.execute(
-            f"SELECT feature_version, generated_at FROM {staging}"
-        ).fetchall()
+        rows = conn.execute(f"SELECT feature_version, generated_at FROM {staging}").fetchall()
         for row in rows:
             assert row[0] == FEATURE_VERSION
             assert row[1] is not None
@@ -279,9 +277,7 @@ class TestWriteStaging:
         )
         write_staging(conn, [row], registry)
         staging = staging_table_name()
-        result = conn.execute(
-            f"SELECT stance, elo_rating FROM {staging}"
-        ).fetchone()
+        result = conn.execute(f"SELECT stance, elo_rating FROM {staging}").fetchone()
         assert result[0] is None
         assert result[1] is None
 
@@ -486,9 +482,7 @@ class TestWriteAndSwap:
         # Force validation to fail after staging write succeeds.
         import ufc_edge.features.storage as storage_mod
 
-        def _failing_validate(
-            _conn: duckdb.DuckDBPyConnection, expected_row_count: int
-        ) -> None:
+        def _failing_validate(_conn: duckdb.DuckDBPyConnection, expected_row_count: int) -> None:
             raise StorageError("Simulated validation failure")
 
         monkeypatch.setattr(storage_mod, "validate_staging", _failing_validate)
@@ -510,9 +504,7 @@ class TestWriteAndSwap:
         """Staging table is dropped when validation fails in write_and_swap."""
         import ufc_edge.features.storage as storage_mod
 
-        def _failing_validate(
-            _conn: duckdb.DuckDBPyConnection, expected_row_count: int
-        ) -> None:
+        def _failing_validate(_conn: duckdb.DuckDBPyConnection, expected_row_count: int) -> None:
             raise StorageError("Forced failure for cleanup test")
 
         monkeypatch.setattr(storage_mod, "validate_staging", _failing_validate)
@@ -549,8 +541,16 @@ class TestSchemaConformance:
         column_names = [row[0] for row in columns]
 
         expected_metadata = list(
-            {"fight_url", "fighter_url", "event_url", "event_date",
-             "opponent_url", "weight_class", "feature_version", "generated_at"}
+            {
+                "fight_url",
+                "fighter_url",
+                "event_url",
+                "event_date",
+                "opponent_url",
+                "weight_class",
+                "feature_version",
+                "generated_at",
+            }
         )
         expected_features = list(registry.schema().keys())
 
@@ -579,6 +579,5 @@ class TestSchemaConformance:
         for col_name, col_type in registry.schema().items():
             expected_duckdb_type = python_to_duckdb[col_type]
             assert type_map[col_name] == expected_duckdb_type, (
-                f"Column '{col_name}': expected {expected_duckdb_type}, "
-                f"got {type_map[col_name]}"
+                f"Column '{col_name}': expected {expected_duckdb_type}, got {type_map[col_name]}"
             )

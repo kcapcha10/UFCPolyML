@@ -45,9 +45,7 @@ def tmp_project(tmp_path: Path) -> Path:
     )
 
     graph_dir = tmp_path / "configs"
-    (graph_dir / "graph.yaml").write_text(
-        "elo:\n  initial_rating: 1500\n"
-    )
+    (graph_dir / "graph.yaml").write_text("elo:\n  initial_rating: 1500\n")
 
     return tmp_path
 
@@ -71,9 +69,7 @@ def project_with_db(tmp_path: Path, fixture_db: Path) -> Path:
     (configs / "default.yaml").write_text(
         f"duckdb_path: {fixture_db}\nlabel_start_date: '2010-01-01'\n"
     )
-    (tmp_path / "configs" / "graph.yaml").write_text(
-        "elo:\n  initial_rating: 1500\n"
-    )
+    (tmp_path / "configs" / "graph.yaml").write_text("elo:\n  initial_rating: 1500\n")
     return tmp_path
 
 
@@ -207,8 +203,7 @@ class TestConfiguration:
     def test_duckdb_path_env_override(self, tmp_project: Path) -> None:
         configs = tmp_project / "configs" / "data"
         (configs / "default.yaml").write_text(
-            "duckdb_path: ${oc.env:DUCKDB_PATH,fallback.duckdb}\n"
-            "label_start_date: '2010-01-01'\n"
+            "duckdb_path: ${oc.env:DUCKDB_PATH,fallback.duckdb}\nlabel_start_date: '2010-01-01'\n"
         )
         with patch.dict("os.environ", {"DUCKDB_PATH": "/custom/path.duckdb"}):
             config = _resolve_config(tmp_project)
@@ -234,18 +229,18 @@ class TestVersionIntegrity:
 
     def test_stale_hash_returns_integrity_failure(self, tmp_path: Path) -> None:
         """CLI rejects when manifest hash doesn't match current source."""
-        features_dir = Path(__file__).resolve().parent.parent.parent / (
-            "src/ufc_edge/features"
-        )
+        features_dir = Path(__file__).resolve().parent.parent.parent / ("src/ufc_edge/features")
         # Write a manifest with a stale (wrong) hash
         manifest_path = tmp_path / "features_version_manifest.json"
         manifest_path.write_text(
-            json.dumps({
-                "version": FEATURE_VERSION,
-                "source_hash": "0000000000000000000000000000000000000000",
-                "changelog": "stale",
-                "created_at": "2024-01-01T00:00:00+00:00",
-            })
+            json.dumps(
+                {
+                    "version": FEATURE_VERSION,
+                    "source_hash": "0000000000000000000000000000000000000000",
+                    "changelog": "stale",
+                    "created_at": "2024-01-01T00:00:00+00:00",
+                }
+            )
         )
 
         from ufc_edge.features.versioning import check_version_integrity
@@ -256,19 +251,19 @@ class TestVersionIntegrity:
 
     def test_valid_hash_passes_integrity(self, tmp_path: Path) -> None:
         """CLI proceeds when manifest hash matches current source."""
-        features_dir = Path(__file__).resolve().parent.parent.parent / (
-            "src/ufc_edge/features"
-        )
+        features_dir = Path(__file__).resolve().parent.parent.parent / ("src/ufc_edge/features")
         current_hash = compute_source_hash(features_dir)
 
         manifest_path = tmp_path / "features_version_manifest.json"
         manifest_path.write_text(
-            json.dumps({
-                "version": FEATURE_VERSION,
-                "source_hash": current_hash,
-                "changelog": "current",
-                "created_at": "2024-01-01T00:00:00+00:00",
-            })
+            json.dumps(
+                {
+                    "version": FEATURE_VERSION,
+                    "source_hash": current_hash,
+                    "changelog": "current",
+                    "created_at": "2024-01-01T00:00:00+00:00",
+                }
+            )
         )
 
         from ufc_edge.features.versioning import check_version_integrity
@@ -340,9 +335,7 @@ class TestArgParsing:
 class TestEndToEnd:
     """Full CLI run against a fixture database."""
 
-    def test_dry_run_on_fixture_db(
-        self, project_with_db: Path, fixture_db: Path
-    ) -> None:
+    def test_dry_run_on_fixture_db(self, project_with_db: Path, fixture_db: Path) -> None:
         """Dry-run loads data, runs replay, but writes nothing."""
         exit_code = _direct_run(
             project_with_db,
@@ -351,9 +344,7 @@ class TestEndToEnd:
         )
         assert exit_code == EXIT_SUCCESS
 
-    def test_full_run_materializes_table(
-        self, project_with_db: Path, fixture_db: Path
-    ) -> None:
+    def test_full_run_materializes_table(self, project_with_db: Path, fixture_db: Path) -> None:
         """Full run writes the features table to DuckDB."""
         exit_code = _direct_run(
             project_with_db,
@@ -369,9 +360,7 @@ class TestEndToEnd:
         conn.close()
         assert count == 4
 
-    def test_full_run_table_has_correct_pks(
-        self, project_with_db: Path, fixture_db: Path
-    ) -> None:
+    def test_full_run_table_has_correct_pks(self, project_with_db: Path, fixture_db: Path) -> None:
         """Materialized table has the expected primary key pairs."""
         _direct_run(
             project_with_db,
@@ -393,9 +382,7 @@ class TestEndToEnd:
 
     def test_config_error_exits_with_code_three(self, tmp_path: Path) -> None:
         """CLI exits 3 when config directory is missing."""
-        features_dir = Path(__file__).resolve().parent.parent.parent / (
-            "src/ufc_edge/features"
-        )
+        features_dir = Path(__file__).resolve().parent.parent.parent / ("src/ufc_edge/features")
         exit_code = _direct_run(tmp_path, features_dir, [])
         assert exit_code == EXIT_CONFIG_ERROR
 
@@ -405,9 +392,7 @@ class TestEndToEnd:
 # ---------------------------------------------------------------------------
 
 
-def _direct_run(
-    project_root: Path, features_dir: Path, argv: list[str]
-) -> int:
+def _direct_run(project_root: Path, features_dir: Path, argv: list[str]) -> int:
     """Execute the CLI pipeline directly with explicit paths for testing."""
     import logging
 

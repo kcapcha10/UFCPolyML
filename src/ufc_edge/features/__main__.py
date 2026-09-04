@@ -319,9 +319,7 @@ def _resolve_config(project_root: Path) -> dict:
 
     graph_cfg = None
     if graph_config_path.exists():
-        graph_cfg = OmegaConf.to_container(
-            OmegaConf.load(graph_config_path), resolve=True
-        )
+        graph_cfg = OmegaConf.to_container(OmegaConf.load(graph_config_path), resolve=True)
 
     return {
         "duckdb_path": resolved_data["duckdb_path"],
@@ -354,8 +352,7 @@ def _build_storage_registry() -> FeatureRegistry:
     storage_families = []
     for family in _PRODUCTION_FAMILIES:
         filtered_columns = {
-            k: v for k, v in family.columns.items()
-            if k not in _METADATA_OVERLAP_COLUMNS
+            k: v for k, v in family.columns.items() if k not in _METADATA_OVERLAP_COLUMNS
         }
         storage_families.append(
             FeatureFamily(
@@ -496,9 +493,7 @@ def run(argv: list[str] | None = None) -> int:
 
     # --- Write to storage ---
     if args.dry_run:
-        logger.info(
-            "Dry run: skipping storage write (%d rows would be written)", len(rows)
-        )
+        logger.info("Dry run: skipping storage write (%d rows would be written)", len(rows))
         return EXIT_SUCCESS
 
     logger.info("Writing features to storage (staging → validate → swap)")
