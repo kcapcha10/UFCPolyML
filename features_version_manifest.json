@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "source_hash": "66714a639056932943d938ec818c040f055f550d48af1418333427acd31cb68f",
-  "changelog": "Initial feature engine scaffold with versioning guard",
-  "created_at": "2026-08-08T23:23:00+00:00"
+  "source_hash": "3addc34f4c44a7f88e92d9608f732543f6fd101be4760d4661c56d176d1b3048",
+  "changelog": "Add CLI entry point for batch replay materialization",
+  "created_at": "2026-08-09T22:38:00+00:00"
 }
