@@ -149,7 +149,4 @@ def gate_check(eval_result: EvalResult) -> bool:
     Precision must be >= 0.80 and recall must be >= 0.60 for the
     due-diligence component to pass its quality gate.
     """
-    return (
-        eval_result.precision >= _PRECISION_THRESHOLD
-        and eval_result.recall >= _RECALL_THRESHOLD
-    )
+    return eval_result.precision >= _PRECISION_THRESHOLD and eval_result.recall >= _RECALL_THRESHOLD

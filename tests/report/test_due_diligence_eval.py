@@ -40,23 +40,25 @@ def conn() -> duckdb.DuckDBPyConnection:
 
 def _make_llm_response(verdict: str) -> str:
     """Build a valid LLM JSON response with the specified verdict."""
-    return json.dumps({
-        "verdict": verdict,
-        "confidence": 0.85,
-        "evidence_urls": ["https://example.com/evidence"],
-        "summary": f"Test verdict: {verdict}",
-        "checklist_findings": {
-            "injury_news": {
-                "present": verdict != "CONFIRM",
-                "detail": "Test finding",
-                "source_url": "https://example.com/evidence",
+    return json.dumps(
+        {
+            "verdict": verdict,
+            "confidence": 0.85,
+            "evidence_urls": ["https://example.com/evidence"],
+            "summary": f"Test verdict: {verdict}",
+            "checklist_findings": {
+                "injury_news": {
+                    "present": verdict != "CONFIRM",
+                    "detail": "Test finding",
+                    "source_url": "https://example.com/evidence",
+                },
+                "weight_cut_concern": None,
+                "short_notice_replacement": None,
+                "camp_change": None,
+                "other_material_news": None,
             },
-            "weight_cut_concern": None,
-            "short_notice_replacement": None,
-            "camp_change": None,
-            "other_material_news": None,
-        },
-    })
+        }
+    )
 
 
 def _make_labels(entries: list[tuple[str, bool]]) -> list[LabeledFight]:
@@ -116,11 +118,13 @@ class TestPrecisionRecall:
 
     def test_perfect_predictions(self, conn):
         """All correct predictions yield precision=1.0, recall=1.0."""
-        labels = _make_labels([
-            ("/fight/tp-1", True),
-            ("/fight/tp-2", True),
-            ("/fight/tn-1", False),
-        ])
+        labels = _make_labels(
+            [
+                ("/fight/tp-1", True),
+                ("/fight/tp-2", True),
+                ("/fight/tn-1", False),
+            ]
+        )
 
         # LLM returns QUALIFY for concern=True fights, CONFIRM for concern=False
         call_order = iter(["QUALIFY", "QUALIFY", "CONFIRM"])
@@ -139,13 +143,15 @@ class TestPrecisionRecall:
 
     def test_known_confusion_matrix(self, conn):
         """Hand-constructed case: 2 TP, 1 FP, 1 FN, 1 TN => P=2/3, R=2/3."""
-        labels = _make_labels([
-            ("/fight/a", True),   # LLM says QUALIFY => TP
-            ("/fight/b", True),   # LLM says QUALIFY => TP
-            ("/fight/c", True),   # LLM says CONFIRM => FN
-            ("/fight/d", False),  # LLM says QUALIFY => FP
-            ("/fight/e", False),  # LLM says CONFIRM => TN
-        ])
+        labels = _make_labels(
+            [
+                ("/fight/a", True),  # LLM says QUALIFY => TP
+                ("/fight/b", True),  # LLM says QUALIFY => TP
+                ("/fight/c", True),  # LLM says CONFIRM => FN
+                ("/fight/d", False),  # LLM says QUALIFY => FP
+                ("/fight/e", False),  # LLM says CONFIRM => TN
+            ]
+        )
 
         verdicts = iter(["QUALIFY", "QUALIFY", "CONFIRM", "QUALIFY", "CONFIRM"])
 
@@ -164,10 +170,12 @@ class TestPrecisionRecall:
 
     def test_no_positive_predictions_yields_zero_precision(self, conn):
         """When the LLM never flags a concern, precision is 0.0."""
-        labels = _make_labels([
-            ("/fight/fn-1", True),
-            ("/fight/tn-1", False),
-        ])
+        labels = _make_labels(
+            [
+                ("/fight/fn-1", True),
+                ("/fight/tn-1", False),
+            ]
+        )
 
         def always_confirm(prompt: str) -> str:
             return _make_llm_response("CONFIRM")
@@ -281,8 +289,7 @@ class TestProductionCodePath:
         run_eval(labels, llm, _search_client, conn)
 
         row = conn.execute(
-            "SELECT verdict FROM due_diligence_verdicts "
-            "WHERE fight_url = ? AND report_run_id = ?",
+            "SELECT verdict FROM due_diligence_verdicts WHERE fight_url = ? AND report_run_id = ?",
             ["/fight/persist-check", "eval-harness"],
         ).fetchone()
 
